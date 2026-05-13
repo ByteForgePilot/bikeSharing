@@ -4,14 +4,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.database import init_db
 from app.api import auth, rides, detection
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: init DB, load ML models, etc.
+    await init_db()
     yield
-    # Shutdown: cleanup
 
 
 app = FastAPI(

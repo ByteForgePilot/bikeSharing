@@ -1,9 +1,13 @@
-import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 
 from app.models import Base
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 
 class Ride(Base):
@@ -16,8 +20,8 @@ class Ride(Base):
     start_lng = Column(Float, default=0.0)
     end_lat = Column(Float, nullable=True)
     end_lng = Column(Float, nullable=True)
-    started_at = Column(DateTime, default=datetime.datetime.utcnow)
-    ended_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime(timezone=True), default=_utcnow)
+    ended_at = Column(DateTime(timezone=True), nullable=True)
     status = Column(String(20), default="active")  # active, completed, cancelled
 
     user = relationship("User", back_populates="rides")

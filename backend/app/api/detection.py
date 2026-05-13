@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.auth import get_current_user
+from app.models.user import User
 from app.services.sensor_analysis import analyze_wheel_wobble
 from app.services.audio_analysis import analyze_chain_noise
 from app.services.fault_classifier import classify_handlebar
@@ -47,7 +48,7 @@ router = APIRouter()
 async def detect_wheel_wobble(
     ride_id: int,
     body: WheelWobbleRequest,
-    user: dict = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     data = [d.model_dump() for d in body.accelerometer_data]
     result = analyze_wheel_wobble(data, body.sample_rate)
@@ -92,7 +93,7 @@ async def detect_wheel_wobble(
 async def detect_chain_noise(
     ride_id: int,
     body: ChainNoiseRequest,
-    user: dict = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     result = analyze_chain_noise(body.audio_features)
     return {"ride_id": ride_id, "chain_noise": result}
@@ -139,7 +140,7 @@ async def detect_chain_noise(
 async def detect_handlebar_misalignment(
     ride_id: int,
     body: HandlebarRequest,
-    user: dict = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     data = [d.model_dump() for d in body.gyroscope_data]
     result = classify_handlebar(data, body.sample_rate)
@@ -154,7 +155,7 @@ async def detect_handlebar_misalignment(
 )
 async def get_detection_report(
     ride_id: int,
-    user: dict = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     return {
         "ride_id": ride_id,

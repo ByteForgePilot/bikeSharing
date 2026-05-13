@@ -25,6 +25,6 @@ class FaultReport(Base):
     handlebar_confidence = Column(Float, nullable=True)
     handlebar_detail = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.now(datetime.timezone.utc))
 
     ride = relationship("Ride", back_populates="fault_reports")
