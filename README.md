@@ -100,6 +100,7 @@ bikeSharing/
 | [08-部署](docs/08-devops-deployment.md) | Docker、CI/CD、环境变量 | 后端/全体 |
 | [09-测试](docs/09-testing-strategy.md) | 26 个测试的分层结构 | 全体 |
 | [10-协作](docs/10-development-workflow.md) | Git 工作流、环境管理、FAQ | 全体 |
+| [11-运行指南](docs/11-run-guide.md) | 从零到运行的完整步骤+排查 | 全体 |
 
 ## 小组分工
 
