@@ -1,5 +1,8 @@
 import { Accelerometer, Gyroscope } from "expo-sensors";
-import type { Subscription } from "expo-sensors";
+
+interface Subscription {
+  remove: () => void;
+}
 
 export interface SensorDataPoint {
   x: number;

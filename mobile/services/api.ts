@@ -6,7 +6,7 @@ interface ApiOptions {
   token?: string;
 }
 
-async function request<T = unknown>(
+export async function request<T = unknown>(
   endpoint: string,
   options: ApiOptions = {}
 ): Promise<T> {

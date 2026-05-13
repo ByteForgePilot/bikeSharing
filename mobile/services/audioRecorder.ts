@@ -1,8 +1,7 @@
 import { Audio } from "expo-av";
-import type { Recording } from "expo-av";
 
 class AudioRecorder {
-  private recording: Recording | null = null;
+  private recording: Audio.Recording | null = null;
   private isRecording = false;
 
   async start(): Promise<void> {

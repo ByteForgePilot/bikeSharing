@@ -9,6 +9,8 @@ import {
 import { useLocalSearchParams, router } from "expo-router";
 import * as Sensors from "expo-sensors";
 
+type Subscription = { remove: () => void };
+
 export default function RideScreen() {
   const { bikeId } = useLocalSearchParams<{ bikeId: string }>();
 
@@ -23,8 +25,8 @@ export default function RideScreen() {
   });
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const accelSub = useRef<Sensors.Subscription | null>(null);
-  const gyroSub = useRef<Sensors.Subscription | null>(null);
+  const accelSub = useRef<Subscription | null>(null);
+  const gyroSub = useRef<Subscription | null>(null);
 
   useEffect(() => {
     startSensors();
