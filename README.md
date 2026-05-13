@@ -86,6 +86,21 @@ bikeSharing/
 └── .github/         # CI/CD 配置
 ```
 
+## 文档索引
+
+| 文档 | 说明 | 适合 |
+|------|------|------|
+| [01-架构](docs/01-architecture.md) | 系统全景、技术选型、数据流 | 全体 |
+| [02-API](docs/02-api-reference.md) | 14 个端点完整参考 | 后端/移动端 |
+| [03-数据库](docs/03-database-design.md) | ER 图、DDL、ORM 模型 | 后端 |
+| [04-算法](docs/04-fault-detection-algorithms.md) | 三种检测算法数学原理 | 算法/后端 |
+| [05-传感器](docs/05-sensor-guide.md) | 手机固定、采样配置、数据格式 | 移动端/算法 |
+| [06-移动端](docs/06-mobile-development.md) | Expo 架构、页面/组件/服务 | 移动端 |
+| [07-ML](docs/07-ml-pipeline.md) | 实验环境、特征工程、模型训练 | 算法 |
+| [08-部署](docs/08-devops-deployment.md) | Docker、CI/CD、环境变量 | 后端/全体 |
+| [09-测试](docs/09-testing-strategy.md) | 26 个测试的分层结构 | 全体 |
+| [10-协作](docs/10-development-workflow.md) | Git 工作流、环境管理、FAQ | 全体 |
+
 ## 小组分工
 
 | 角色 | 人数 | 职责 |
