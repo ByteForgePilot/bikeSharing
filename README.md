@@ -45,19 +45,21 @@ conda activate bikeSharing
 conda env update -f environment.yml --prune
 
 # 启动服务
-docker-compose up -d              # 启动 PostgreSQL + Redis
+docker compose up -d db redis     # 启动 PostgreSQL + Redis
 cd backend
+set PYTHONPATH=.
 uvicorn app.main:app --reload
 ```
 
 **方式二：venv + pip**
 
 ```bash
-docker-compose up -d              # 启动 PostgreSQL + Redis
+docker compose up -d db redis     # 启动 PostgreSQL + Redis
 cd backend
 python -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+set PYTHONPATH=.
 uvicorn app.main:app --reload
 ```
 
@@ -65,14 +67,18 @@ uvicorn app.main:app --reload
 
 ```bash
 cd mobile
+npm install expo-linking --legacy-peer-deps  # expo-router 必需依赖
 npm install
 npx expo start
 ```
 
+> 无后端时自动进入离线模式，数据存本地文件。APK 构建见 [运行指南 §9](docs/11-run-guide.md#9-构建独立-apk)。
+
 ### 运行测试
 
 ```bash
-cd backend && pytest
+cd backend && pytest -v
+# 32 个测试全部通过：3 API + 23 服务层 + 6 数据库集成
 ```
 
 ## 项目结构
@@ -98,9 +104,10 @@ bikeSharing/
 | [06-移动端](docs/06-mobile-development.md) | Expo 架构、页面/组件/服务 | 移动端 |
 | [07-ML](docs/07-ml-pipeline.md) | 实验环境、特征工程、模型训练 | 算法 |
 | [08-部署](docs/08-devops-deployment.md) | Docker、CI/CD、环境变量 | 后端/全体 |
-| [09-测试](docs/09-testing-strategy.md) | 26 个测试的分层结构 | 全体 |
+| [09-测试](docs/09-testing-strategy.md) | 32 个测试的分层结构（3层：API + 服务 + DB集成） | 全体 |
 | [10-协作](docs/10-development-workflow.md) | Git 工作流、环境管理、FAQ | 全体 |
 | [11-运行指南](docs/11-run-guide.md) | 从零到运行的完整步骤+排查 | 全体 |
+| [00-团队配置指南](docs/00-team-setup.md) | 新队友零基础配置（极详细） | 新成员 |
 
 ## 小组分工
 
@@ -138,6 +145,6 @@ git push -u origin feature/你的功能名
 ### 4. 运行测试（提交前必做）
 
 ```bash
-docker-compose up -d              # 启动依赖服务
-cd backend && pytest              # 26 个测试应全部通过
+docker compose up -d db redis     # 启动依赖服务
+cd backend && pytest -v           # 32 个测试应全部通过
 ```

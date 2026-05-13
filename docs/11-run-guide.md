@@ -73,7 +73,7 @@ docker info
 ### 3.2 启动服务
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
 **预期输出：**
@@ -87,7 +87,7 @@ docker-compose up -d
 ### 3.3 验证服务状态
 
 ```bash
-docker-compose ps
+docker compose ps
 ```
 
 **预期输出（State 列应为 "healthy"）：**
@@ -100,7 +100,7 @@ bikesharing-redis-1   Up (healthy)
 ### 3.4 验证 PostgreSQL
 
 ```bash
-docker-compose exec db psql -U postgres -c "SELECT 1 AS connected;"
+docker compose exec db psql -U postgres -c "SELECT 1 AS connected;"
 ```
 
 **预期输出：**
@@ -113,7 +113,7 @@ docker-compose exec db psql -U postgres -c "SELECT 1 AS connected;"
 ### 3.5 验证 Redis
 
 ```bash
-docker-compose exec redis redis-cli PING
+docker compose exec redis redis-cli PING
 ```
 
 **预期输出：**
@@ -319,22 +319,28 @@ pytest -v
 platform win32 -- Python 3.11.15, pytest-9.0.3
 
 backend/tests/test_api.py::test_health_check PASSED                      [  3%]
-backend/tests/test_api.py::test_register_and_login PASSED                [  7%]
-backend/tests/test_api.py::test_wheel_wobble_detection PASSED            [ 11%]
-backend/tests/test_services.py::TestWheelWobble::test_insufficient_data PASSED [ 15%]
+backend/tests/test_api.py::test_register_and_login PASSED                [  6%]
+backend/tests/test_api.py::test_wheel_wobble_detection PASSED            [  9%]
+backend/tests/test_rides_db.py::test_full_ride_lifecycle PASSED          [ 12%]
+...
+backend/tests/test_rides_db.py::test_detection_with_ride PASSED          [ 28%]
+backend/tests/test_services.py::TestWheelWobble::test_insufficient_data PASSED [ 31%]
 ...
 backend/tests/test_services.py::TestHandlebar::test_return_keys PASSED   [100%]
 
-============================= 26 passed in 1.19s ==============================
+============================= 32 passed in 1.42s ==============================
 ```
 
 ### 6.3 分模块运行
 
 ```bash
-# 仅 API 集成测试
+# 仅 API 集成测试（3 个）
 pytest tests/test_api.py -v
 
-# 仅服务层单元测试
+# 仅 DB 集成测试（6 个）— 需要 Docker 运行
+pytest tests/test_rides_db.py -v
+
+# 仅服务层单元测试（23 个）
 pytest tests/test_services.py -v
 
 # 只测轮胎偏摆相关
@@ -420,50 +426,87 @@ Starting project at E:\Project\bikeSharing\mobile
 
 ### 8.2 验证首页功能
 
-1. App 打开后显示首页（标题 "bikeSharing"）
-2. 查看检测项目列表（轮胎偏摆、链条异响、车头不正）
-3. 输入任意单车编号（如 `BIKE-001`）
-4. 点击"开始骑行"
+1. App 启动自动检测后端可达性，显示在线🟢/离线📱状态
+2. 首页全中文，标题「共享单车故障检测」+ 三个彩色检测卡片
+3. 输入单车编号（如 `B001`），支持回车提交
+4. 点击"🚴 开始骑行检测" → 跳转骑行页
 
 ### 8.3 验证骑行页面
 
-1. 页面跳转到骑行页，顶部显示单车编号和计时器
-2. 传感器状态指示灯应为绿色（表示采集中）
-3. 加速度计和陀螺仪数值应实时变化
-4. 检测状态应在几秒后更新（模拟数据）
+1. 深色计时器头部显示车辆编号 + 大字计时器
+2. 传感器数据用动态彩色进度条展示（替代原始数字），超阈值自动变色
+3. 右上角旋转指示环表示采集中
+4. 每 100 样本（约 5 秒）自动上传或本地保存
+5. 点击"🛑 结束骑行" → 在线模式下自动调用检测 API
+6. 检测结果使用 FaultIndicator 展示：正常/疑似/故障 + 置信度
 
 > 注意：传感器在模拟器上不工作，必须在真机上运行。
 
 ### 8.4 验证历史页面
 
-1. 切换到"历史" Tab
-2. 看到 3 条模拟历史记录
-3. 每条记录显示单车编号、日期、时长和故障状态
+1. 切换到"历史" Tab，顶部显示三列统计数字
+2. 筛选标签可切换「全部」「已完成」「进行中」
+3. 点击卡片展开详情（骑行时长、起止时间、数据来源），带 LayoutAnimation
+4. 进行中的骑行左侧黄色边框标识
+5. 下拉可刷新，数据来源在线/离线自动切换
 
 ### 8.5 检查传感器可用性
 
 如果传感器数据不更新，可以添加调试代码验证：
 
 ```typescript
-// 在 mobile/app/(tabs)/ride.tsx 的 useEffect 中临时添加
-import { Accelerometer, Gyroscope } from 'expo-sensors';
+// 在 mobile/services/sensors.ts 中已导出 checkSensorsAvailable()
+import { checkSensorsAvailable } from '../services/sensors';
 
-Accelerometer.isAvailableAsync().then(a => console.log('Accel available:', a));
-Gyroscope.isAvailableAsync().then(g => console.log('Gyro available:', g));
+checkSensorsAvailable().then(s => console.log('Accel:', s.accelerometer, 'Gyro:', s.gyroscope));
 ```
 
 ---
 
-## 9. ML 环境搭建（算法工程师）
+## 9. 构建独立 APK
 
-### 9.1 确认 Conda 环境已创建
+如果需要在手机上独立运行（无需 Metro 开发服务器），构建 release APK。
+
+### 9.1 前提条件
+
+- Android Studio 2025.3+ 已安装
+- Android SDK Platform 34 已下载（`File → Settings → Android SDK`）
+- JDK 17 已安装（`D:\Java\jdk-17\jdk-17.0.19+10`）
+- 依赖 `expo-linking` 已安装（`npm install expo-linking --legacy-peer-deps`）
+
+### 9.2 构建步骤
+
+1. **Android Studio → File → Open** → 选择 `mobile/android`
+2. 等待 Gradle Sync 完成（首次 10-20 分钟，连接阿里云 Maven 镜像）
+3. **File → Settings → Build Tools → Gradle → Gradle JDK** → 设为 `D:\Java\jdk-17\jdk-17.0.19+10`
+4. 左侧 **Build Variants** → 将 `app` 从 `debug` 切换为 `release`
+5. **Build → Build APK(s)**
+6. 构建完成后右下角 **locate** → APK 位于 `android/app/build/outputs/apk/release/app-release.apk`
+
+> 构建期间 `:app:createBundleReleaseJsAndAssets` 任务将 JS 代码打包进 APK（~997 模块，44 资源文件）。
+
+### 9.3 常见构建问题
+
+| 错误 | 原因 | 解决 |
+|------|------|------|
+| `CXX5304: SDK XML version 4` | SDK Build-Tools 版本太旧 | SDK Manager → SDK Tools → 更新所有 |
+| `JS bundle failed: expo-linking not found` | 缺少依赖 | `npm install expo-linking --legacy-peer-deps` |
+| `Kotlin 1.9.24 not compatible` | Compose Compiler 版本不匹配 | `build.gradle` 中 Kotlin 设为 1.9.25 |
+| `Cannot find JDK 17` | Gradle JDK 未设置 | Settings → Gradle → Gradle JDK → 选 JDK 17 |
+| `Unable to load script` (运行时) | 用的是 debug APK | 切换到 release 模式构建 |
+
+---
+
+## 10. ML 环境搭建（算法工程师）
+
+### 10.1 确认 Conda 环境已创建
 
 ```bash
 conda activate bikeSharing
 # 环境已包含 jupyter, numpy, scipy, pandas, matplotlib, seaborn, librosa, scikit-learn
 ```
 
-### 9.2 启动 Jupyter
+### 10.2 启动 Jupyter
 
 ```bash
 cd ml
@@ -472,7 +515,7 @@ jupyter notebook
 
 浏览器自动打开 `http://localhost:8888`。
 
-### 9.3 运行数据探索笔记
+### 10.3 运行数据探索笔记
 
 1. 在 Jupyter 界面中打开 `notebooks/01_data_exploration.ipynb`
 2. 依次运行所有 Cell（Kernel → Restart & Run All）
@@ -484,22 +527,22 @@ jupyter notebook
 
 ---
 
-## 10. 停止服务
+## 11. 停止服务
 
 ```bash
 # 停止后端（在运行 uvicorn 的终端按 Ctrl+C）
 
 # 停止基础设施
-docker-compose down
+docker compose down
 # 如果还想同时删除数据库数据（重置所有数据）
-docker-compose down -v
+docker compose down -v
 ```
 
 ---
 
-## 11. 常见问题排查
+## 12. 常见问题排查
 
-### Q1: `docker-compose up -d` 报端口冲突
+### Q1: `docker compose up -d` 报端口冲突
 
 **错误信息：** `port is already allocated`
 
@@ -512,7 +555,7 @@ netstat -ano | findstr "5432"
 netstat -ano | findstr "6379"
 
 # 如果本地已有 PostgreSQL 在运行，先停止它
-# 或在 docker-compose.yml 中修改端口映射为 5433:5432 和 6380:6379
+# 或在 docker compose.yml 中修改端口映射为 5433:5432 和 6380:6379
 ```
 
 ### Q2: Conda 环境创建失败
@@ -562,7 +605,7 @@ pip show bcrypt  # Version: 3.2.2
 **解决：**
 1. 重新调用 `/api/auth/login` 获取新 Token
 2. 确认 Token 在请求头中的格式为 `Authorization: Bearer <token>`（注意中间有空格）
-3. 检查服务器是否重启过（内存存储会丢失所有用户数据，需重新注册）
+3. 检查 Docker 数据库是否停止过（数据已持久化到 PostgreSQL，重启不影响）
 
 ### Q6: 移动端连不上后端
 
@@ -616,24 +659,27 @@ Expo Go 中的传感器权限：
 | `POST /api/auth/register` | ✅ | 随时可用 |
 | `POST /api/auth/login` | ✅ | 随时可用 |
 | `GET /api/auth/me` | ✅ | 需要 Token |
+| `POST /api/rides/start` | ✅ | 需要 Token，写入 PostgreSQL |
+| `POST /api/rides/{id}/end` | ✅ | 需要 Token，更新骑行状态 |
+| `POST /api/rides/{id}/sensor-data` | ✅ | 需要 Token |
+| `POST /api/rides/{id}/audio` | ✅ | 需要 Token |
+| `GET /api/rides/` | ✅ | 需要 Token，支持分页 |
+| `GET /api/rides/{id}` | ✅ | 需要 Token，用户隔离 |
 | `POST /api/detection/wheel-wobble/{id}` | ✅ | 需要 Token |
 | `POST /api/detection/chain-noise/{id}` | ✅ | 需要 Token |
 | `POST /api/detection/handlebar/{id}` | ✅ | 需要 Token |
-| `POST /api/rides/start` | ⚠️ Stub | 返回模拟数据 |
-| `POST /api/rides/{id}/end` | ⚠️ Stub | 返回模拟数据 |
-| `GET /api/rides/` | ⚠️ Stub | 返回空列表 |
-| `GET /api/detection/report/{id}` | ⚠️ Stub | 返回空报告 |
+| `GET /api/detection/report/{id}` | ⚠️ Stub | 返回空报告，待实现持久化 |
 
 ---
 
-## 12. 完整启动检查清单
+## 13. 完整启动检查清单
 
 一键复制粘贴验证整套系统：
 
 ```bash
 # === 基础设施 ===
 docker info > /dev/null 2>&1 && echo "✅ Docker 运行中" || echo "❌ Docker 未启动"
-docker-compose ps | grep -q healthy && echo "✅ PostgreSQL + Redis 健康" || echo "❌ 容器异常"
+docker compose ps | grep -q healthy && echo "✅ PostgreSQL + Redis 健康" || echo "❌ 容器异常"
 
 # === 后端环境 ===
 conda activate bikeSharing 2>/dev/null && echo "✅ Conda 环境就绪" || echo "❌ Conda 环境未创建"
