@@ -62,7 +62,10 @@ export async function login(username: string, password: string) {
 // --- Rides ---
 
 export async function startRide(bikeId: string, lat: number, lng: number, token: string) {
-  return request(`/api/rides/start?bike_id=${bikeId}&lat=${lat}&lng=${lng}`, {
+  return request<{
+    ride: { id: number; user_id: number; bike_id: string; start_lat: number; start_lng: number; started_at: string; status: string };
+    message: string;
+  }>(`/api/rides/start?bike_id=${bikeId}&lat=${lat}&lng=${lng}`, {
     method: "POST",
     token,
   });
@@ -75,16 +78,55 @@ export async function endRide(rideId: number, lat: number, lng: number, token: s
   });
 }
 
+export async function getRides(
+  token: string,
+  limit: number = 20,
+  offset: number = 0
+) {
+  return request<{
+    rides: Array<{
+      id: number;
+      user_id: number;
+      bike_id: string;
+      start_lat: number;
+      start_lng: number;
+      end_lat: number | null;
+      end_lng: number | null;
+      started_at: string;
+      ended_at: string | null;
+      status: string;
+    }>;
+    total: number;
+    limit: number;
+    offset: number;
+  }>(`/api/rides/?limit=${limit}&offset=${offset}`, { token });
+}
+
+export async function getRide(rideId: number, token: string) {
+  return request<{
+    id: number;
+    user_id: number;
+    bike_id: string;
+    start_lat: number;
+    start_lng: number;
+    end_lat: number | null;
+    end_lng: number | null;
+    started_at: string;
+    ended_at: string | null;
+    status: string;
+  }>(`/api/rides/${rideId}`, { token });
+}
+
 export async function uploadSensorData(
   rideId: number,
   accelerometer: Array<{ x: number; y: number; z: number; timestamp: number }>,
   gyroscope: Array<{ x: number; y: number; z: number; timestamp: number }>,
-  timestamps: number[],
+  sampleRate: number,
   token: string
 ) {
   return request(`/api/rides/${rideId}/sensor-data`, {
     method: "POST",
-    body: { accelerometer, gyroscope, timestamps },
+    body: { accelerometer, gyroscope, sample_rate: sampleRate },
     token,
   });
 }
@@ -97,9 +139,27 @@ export async function detectWheelWobble(
   sampleRate: number,
   token: string
 ) {
-  return request(`/api/detection/wheel-wobble/${rideId}`, {
+  return request<{
+    ride_id: number;
+    wheel_wobble: { detected: string; confidence: number; detail: string };
+  }>(`/api/detection/wheel-wobble/${rideId}`, {
     method: "POST",
     body: { accelerometer_data: data, sample_rate: sampleRate },
+    token,
+  });
+}
+
+export async function detectChainNoise(
+  rideId: number,
+  features: number[],
+  token: string
+) {
+  return request<{
+    ride_id: number;
+    chain_noise: { detected: string; confidence: number; detail: string };
+  }>(`/api/detection/chain-noise/${rideId}`, {
+    method: "POST",
+    body: { audio_features: features },
     token,
   });
 }
@@ -110,7 +170,10 @@ export async function detectHandlebarMisalignment(
   sampleRate: number,
   token: string
 ) {
-  return request(`/api/detection/handlebar/${rideId}`, {
+  return request<{
+    ride_id: number;
+    handlebar_misalignment: { detected: string; confidence: number; detail: string };
+  }>(`/api/detection/handlebar/${rideId}`, {
     method: "POST",
     body: { gyroscope_data: data, sample_rate: sampleRate },
     token,
