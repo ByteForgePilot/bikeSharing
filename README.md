@@ -93,3 +93,35 @@ bikeSharing/
 | 后端工程师 | 1-2 | FastAPI、数据库、API |
 | 移动端工程师 | 1-2 | React Native、传感器、UI |
 | 算法工程师 | 1-2 | 信号处理、音频分析、ML |
+
+## 参与开发
+
+### 1. 克隆仓库
+
+```bash
+git clone https://github.com/ByteForgePilot/bikeSharing.git
+cd bikeSharing
+```
+
+### 2. 搭建环境
+
+- 后端/算法：`conda env create -f environment.yml && conda activate bikeSharing`
+- 移动端：`cd mobile && npm install`
+
+### 3. 开发流程
+
+```bash
+git checkout -b feature/你的功能名    # 从 main 新建分支
+# ... 写代码 ...
+git add .
+git commit -m "做了什么改动"
+git push -u origin feature/你的功能名
+# 到 GitHub 页面创建 Pull Request
+```
+
+### 4. 运行测试（提交前必做）
+
+```bash
+docker-compose up -d              # 启动依赖服务
+cd backend && pytest              # 26 个测试应全部通过
+```
