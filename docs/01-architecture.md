@@ -85,7 +85,7 @@ bikeSharing 是一个基于智能手机传感器（加速度计、陀螺仪、�
 | FastAPI | 0.115+ | 异步 Web 框架 |
 | Uvicorn | 0.34+ | ASGI 服务器 |
 | Pydantic | 2.10+ | 数据验证/序列化 |
-| SQLAlchemy | 2.0+ | ORM（声明式模型已定义，尚未接入路由） |
+| SQLAlchemy | 2.0+ | ORM（异步引擎 + AsyncSession，Auth + Rides 均已持久化） |
 | python-jose | 3.3+ | JWT 令牌签发与验证 |
 | passlib + bcrypt | 1.7 / 3.2 | 密码哈希 |
 
@@ -114,22 +114,23 @@ bikeSharing 是一个基于智能手机传感器（加速度计、陀螺仪、�
 ### 一次完整的骑行检测流程
 
 ```
-1. 用户打开 App → 进入首页 (index.tsx)
+1. 用户打开 App → AuthProvider 自动注册/登录 → 首页 (index.tsx)
 2. 输入/扫描单车编号 → 点击"开始骑行"
-3. 跳转骑行页面 (ride.tsx)
-   ├── 调用 POST /api/rides/start     → 创建骑行记录 (stub)
-   ├── 启动传感器采集 (20Hz)
-   │   ├── Accelerometer.addListener  → accelBuffer
-   │   └── Gyroscope.addListener      → gyroBuffer
-   └── 每 100 个样本自动 flush
+   └── 调用 POST /api/rides/start → 创建骑行记录 (PostgreSQL) → 获取 rideId
+3. 跳转骑行页面 (ride.tsx)，接收 { bikeId, rideId }
+   ├── 启动 sensorCollector (20Hz, 缓冲 100 样本)
+   │   ├── Accelerometer.addListener → accelBuffer
+   │   └── Gyroscope.addListener → gyroBuffer
+   ├── 每 100 样本自动 flush → POST /api/rides/{id}/sensor-data
+   └── 累积全部数据供最终检测使用
 4. 用户点击"结束骑行"
-   ├── 停止传感器
-   ├── 调用 POST /api/rides/{id}/end   → 结束骑行 (stub)
-   ├── 调用 POST /api/detection/wheel-wobble/{id}    → 轮胎检测
-   ├── 调用 POST /api/detection/chain-noise/{id}      → 链条检测
-   └── 调用 POST /api/detection/handlebar/{id}        → 车头检测
-5. 调用 GET /api/detection/report/{id}   → 汇总报告
-6. 显示检测结果 → 保存到历史页面
+   ├── 停止传感器，上传最后一批数据
+   ├── 调用 POST /api/rides/{id}/end → 更新骑行状态 (PostgreSQL)
+   ├── 调用 POST /api/detection/wheel-wobble/{id}  → 轮胎检测
+   ├── 调用 POST /api/detection/chain-noise/{id}    → 链条检测
+   └── 调用 POST /api/detection/handlebar/{id}      → 车头检测
+5. 显示检测结果 (FaultIndicator 组件): normal/suspect/fault + 置信度
+6. 历史页面 (history.tsx) → GET /api/rides/ → 展示真实骑行记录
 ```
 
 ### 数据采集协议
@@ -268,8 +269,9 @@ bikeSharing/
 
 ## 下一步架构演进
 
-1. **DB 集成** — 将 auth 从内存存储迁移到 PostgreSQL（模型已定义）
+1. **DB 集成** ✅ — Auth + Rides 已通过 SQLAlchemy AsyncSession 接入 PostgreSQL（32 测试通过）
 2. **Redis 集成** — 实现会话缓存、检测任务队列
 3. **FFT/MFCC 实现** — 升级阈值法为频谱分析
-4. **实时推送** — WebSocket 推送检测进度
-5. **端侧备选** — 对关键场景提供离线检测能力
+4. **故障检测持久化** — 检测结果写入 fault_reports 表
+5. **实时推送** — WebSocket 推送检测进度
+6. **端侧备选** — 对关键场景提供离线检测能力

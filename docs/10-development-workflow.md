@@ -28,7 +28,7 @@ conda env create -f environment.yml
 conda activate bikeSharing
 
 # 启动基础设施
-docker-compose up -d db redis
+docker compose up -d db redis
 
 # 启动后端
 cd backend
@@ -89,7 +89,7 @@ git commit -m "做了什么，为什么这样做"
 ### 第三步：提交前运行测试
 
 ```bash
-cd backend && pytest    # 26 个测试应全部通过
+cd backend && pytest    # 32 个测试应全部通过
 ```
 
 ### 第四步：推送并创建 PR
@@ -241,8 +241,8 @@ pip install "bcrypt<4"
 docker ps
 
 # 确认 PostgreSQL 健康
-docker-compose exec db pg_isready -U postgres
+docker compose exec db pg_isready -U postgres
 
 # 如果容器不存在，重新创建
-docker-compose up -d db
+docker compose up -d db
 ```

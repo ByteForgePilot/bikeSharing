@@ -19,7 +19,7 @@
 
 ```bash
 # 1. 启动基础设施 (PostgreSQL + Redis)
-docker-compose up -d
+docker compose up -d
 
 # 2. 启动后端
 conda activate bikeSharing
@@ -35,7 +35,7 @@ npx expo start
 ### 仅启动基础设施
 
 ```bash
-docker-compose up -d db redis
+docker compose up -d db redis
 ```
 
 ---
@@ -181,38 +181,38 @@ python -c "import secrets; print(secrets.token_hex(32))"
 ### 查看日志
 
 ```bash
-docker-compose logs -f backend    # 后端日志
-docker-compose logs -f db         # 数据库日志
-docker-compose logs -f --tail=100 # 最近 100 行
+docker compose logs -f backend    # 后端日志
+docker compose logs -f db         # 数据库日志
+docker compose logs -f --tail=100 # 最近 100 行
 ```
 
 ### 进入容器调试
 
 ```bash
-docker-compose exec db psql -U postgres -d bikesharing  # PostgreSQL CLI
-docker-compose exec redis redis-cli                      # Redis CLI
-docker-compose exec backend bash                         # 后端容器 Shell
+docker compose exec db psql -U postgres -d bikesharing  # PostgreSQL CLI
+docker compose exec redis redis-cli                      # Redis CLI
+docker compose exec backend bash                         # 后端容器 Shell
 ```
 
 ### 数据库操作
 
 ```bash
 # 重置数据库（删除所有数据）
-docker-compose down -v   # -v 删除 volumes
-docker-compose up -d     # 重新创建
+docker compose down -v   # -v 删除 volumes
+docker compose up -d     # 重新创建
 
 # 备份数据库
-docker-compose exec db pg_dump -U postgres bikesharing > backup.sql
+docker compose exec db pg_dump -U postgres bikesharing > backup.sql
 
 # 恢复数据库
-docker-compose exec -T db psql -U postgres bikesharing < backup.sql
+docker compose exec -T db psql -U postgres bikesharing < backup.sql
 ```
 
 ### 清理
 
 ```bash
-docker-compose down            # 停止服务，保留 volumes
-docker-compose down -v         # 停止服务 + 删除 volumes
+docker compose down            # 停止服务，保留 volumes
+docker compose down -v         # 停止服务 + 删除 volumes
 docker system prune -a         # 清理所有未使用的镜像/容器/网络
 ```
 

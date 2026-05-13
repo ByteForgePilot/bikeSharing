@@ -118,7 +118,7 @@ Authorization: Bearer <access_token>
 
 ## 3. 骑行管理 (Rides)
 
-> 当前为 Stub 实现，返回模拟数据，待数据库接入。
+> 所有 rides 端点已通过 SQLAlchemy AsyncSession 接入 PostgreSQL，数据持久化存储。
 
 ### `POST /api/rides/start`
 
@@ -193,7 +193,7 @@ Authorization: Bearer <access_token>
   "gyroscope": [
     {"x": 0.01, "y": 0.02, "z": 0.00, "timestamp": 0.0}
   ],
-  "timestamps": [0.0, 0.02, 0.04]
+  "sample_rate": 50.0
 }
 ```
 
@@ -210,7 +210,7 @@ Authorization: Bearer <access_token>
 
 ### `POST /api/rides/{ride_id}/audio`
 
-上传音频片段（Stub，请求体未解析）。
+上传音频片段。接收原始音频数据供后续 MFCC 特征提取。
 
 **响应 200:**
 ```json
@@ -224,7 +224,7 @@ Authorization: Bearer <access_token>
 
 ### `GET /api/rides/`
 
-获取用户骑行历史列表（Stub）。
+获取用户骑行历史列表。
 
 **查询参数:**
 | 参数 | 类型 | 默认值 | 说明 |
@@ -235,8 +235,21 @@ Authorization: Bearer <access_token>
 **响应 200:**
 ```json
 {
-  "rides": [],
-  "total": 0,
+  "rides": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "bike_id": "BIKE-001",
+      "start_lat": 30.5,
+      "start_lng": 104.1,
+      "end_lat": null,
+      "end_lng": null,
+      "started_at": "2026-05-13T12:00:00+00:00",
+      "ended_at": null,
+      "status": "active"
+    }
+  ],
+  "total": 1,
   "limit": 20,
   "offset": 0
 }
@@ -246,12 +259,21 @@ Authorization: Bearer <access_token>
 
 ### `GET /api/rides/{ride_id}`
 
-获取单次骑行详情（Stub）。
+获取单次骑行详情。仅返回当前用户自己的骑行记录（其他人返回 404）。
 
 **响应 200:**
 ```json
 {
-  "ride": null
+  "id": 1,
+  "user_id": 1,
+  "bike_id": "BIKE-001",
+  "start_lat": 30.5,
+  "start_lng": 104.1,
+  "end_lat": null,
+  "end_lng": null,
+  "started_at": "2026-05-13T12:00:00+00:00",
+  "ended_at": null,
+  "status": "active"
 }
 ```
 
@@ -356,7 +378,7 @@ Authorization: Bearer <access_token>
 
 ### `GET /api/detection/report/{ride_id}`
 
-获取一次骑行的综合检测报告（Stub，返回空结果）。
+获取一次骑行的综合检测报告（当前返回空结果，待实现检测结果持久化）。
 
 **响应 200:**
 ```json
@@ -402,7 +424,7 @@ class ChainNoiseRequest(BaseModel):
     audio_features: List[float]
 ```
 
-### SensorBatch（已定义，未使用）
+### SensorBatch（已定义，与 rides.py 中 SensorDataUpload 一致）
 ```python
 class SensorBatch(BaseModel):
     ride_id: int
@@ -440,12 +462,12 @@ class FaultDetectionResult(BaseModel):
 | POST | `/api/auth/register` | 否 | ✅ 实现 |
 | POST | `/api/auth/login` | 否 | ✅ 实现 |
 | GET | `/api/auth/me` | Bearer | ✅ 实现 |
-| POST | `/api/rides/start` | Bearer | ⚠️ Stub |
-| POST | `/api/rides/{id}/end` | Bearer | ⚠️ Stub |
-| POST | `/api/rides/{id}/sensor-data` | Bearer | ⚠️ Stub |
-| POST | `/api/rides/{id}/audio` | Bearer | ⚠️ Stub |
-| GET | `/api/rides/` | Bearer | ⚠️ Stub |
-| GET | `/api/rides/{id}` | Bearer | ⚠️ Stub |
+| POST | `/api/rides/start` | Bearer | ✅ 实现 |
+| POST | `/api/rides/{id}/end` | Bearer | ✅ 实现 |
+| POST | `/api/rides/{id}/sensor-data` | Bearer | ✅ 实现 |
+| POST | `/api/rides/{id}/audio` | Bearer | ✅ 实现 |
+| GET | `/api/rides/` | Bearer | ✅ 实现 |
+| GET | `/api/rides/{id}` | Bearer | ✅ 实现 |
 | POST | `/api/detection/wheel-wobble/{id}` | Bearer | ✅ 实现 |
 | POST | `/api/detection/chain-noise/{id}` | Bearer | ✅ 实现 |
 | POST | `/api/detection/handlebar/{id}` | Bearer | ✅ 实现 |

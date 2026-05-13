@@ -2,9 +2,8 @@
 
 ## 概述
 
-使用 PostgreSQL 16 作为主存储。当前 ORM 模型已定义（SQLAlchemy 2.0 声明式），
-但尚未通过 `sessionmaker` / `AsyncSession` 接入路由。
-路由层目前使用内存字典（auth）和 Stub 返回值（rides）。
+使用 PostgreSQL 16 作为主存储。ORM 模型已通过 SQLAlchemy 2.0 AsyncSession 接入路由，
+Auth（注册/登录/JWT）和 Rides（CRUD）均已持久化，32 个测试全部通过。
 
 ---
 
@@ -114,7 +113,7 @@ class User(Base):
     id            = Column(Integer, primary_key=True, autoincrement=True)
     username      = Column(String(64), unique=True, nullable=False, index=True)
     password_hash = Column(String(256), nullable=False)
-    created_at    = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at    = Column(DateTime(timezone=True), default=datetime.datetime.now(datetime.timezone.utc))
 
     rides = relationship("Ride", back_populates="user")
 ```
@@ -133,8 +132,8 @@ class Ride(Base):
     start_lng  = Column(Float, default=0.0)
     end_lat    = Column(Float, nullable=True)
     end_lng    = Column(Float, nullable=True)
-    started_at = Column(DateTime, default=datetime.datetime.utcnow)
-    ended_at   = Column(DateTime, nullable=True)
+    started_at = Column(DateTime(timezone=True), default=datetime.datetime.now(datetime.timezone.utc))
+    ended_at   = Column(DateTime(timezone=True), nullable=True)
     status     = Column(String(20), default="active")
 
     user          = relationship("User", back_populates="rides")
@@ -159,7 +158,7 @@ class FaultReport(Base):
     handlebar_detected      = Column(String(20), default="unknown")
     handlebar_confidence    = Column(Float, nullable=True)
     handlebar_detail        = Column(Text, nullable=True)
-    created_at              = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at              = Column(DateTime(timezone=True), default=datetime.datetime.now(datetime.timezone.utc))
 
     ride = relationship("Ride", back_populates="fault_reports")
 ```
@@ -240,4 +239,4 @@ alembic upgrade head
 2. **骑行轨迹存储** — 当前 `start_lat/lng` 和 `end_lat/lng` 仅存储起终点。
    如果后续需要完整轨迹，可以添加 `ride_locations` 表或使用 PostGIS 扩展。
 
-3. **Redis** — 当前未使用。计划用途：会话缓存（替代内存 `_users` 字典）、检测任务队列。
+3. **Redis** — 当前已启动（Docker），尚未在应用层使用。计划用途：会话缓存、检测任务队列。

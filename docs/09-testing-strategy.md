@@ -2,13 +2,15 @@
 
 ## 当前状态
 
-**26 个测试，全部通过。**
+**32 个测试，全部通过。**
 
 ```
 backend/tests/
 ├── __init__.py
+├── conftest.py          # 测试夹具（async engine, DB session, HTTP client）
 ├── test_api.py          # 3 个 API 集成测试
-└── test_services.py     # 23 个服务层单元测试
+├── test_services.py     # 23 个服务层单元测试
+└── test_rides_db.py     # 6 个数据库集成测试
 ```
 
 ---
@@ -23,6 +25,9 @@ backend/tests/
 │   API 集成测试                  │  ← test_api.py (3 tests)
 │   HTTP 请求 → 路由 → 响应       │
 ├────────────────────────────────┤
+│   DB 集成测试                   │  ← test_rides_db.py (6 tests)
+│   API 路由 → ORM → PostgreSQL  │
+├────────────────────────────────┤
 │   服务层单元测试                 │  ← test_services.py (23 tests)
 │   纯函数，无外部依赖              │
 └────────────────────────────────┘
@@ -33,8 +38,8 @@ backend/tests/
 服务层函数是**纯函数**（输入数据 → 输出结果），无数据库/网络依赖，
 执行快（23 个测试 < 0.1s），适合覆盖所有边界条件。
 
-API 测试通过 `httpx.ASGITransport` 模拟 HTTP 请求，但不经过网络层，
-也不需要真实数据库（当前 auth 使用内存存储），速度也很快。
+API 测试和 DB 集成测试通过 `httpx.ASGITransport` 模拟 HTTP 请求，不经过网络层。
+DB 集成测试使用真实的 PostgreSQL（bikesharing_test 数据库），每个测试后自动 rollback 保持隔离。
 
 ---
 
@@ -226,7 +231,18 @@ PR 在测试全部通过前不应合并。
 | 层级 | 当前 | 目标 |
 |------|------|------|
 | 服务层 (`services/`) | 100% (23 tests) | > 90% |
-| API 路由 (`api/`) | 部分 (3 tests) | > 80% |
-| 数据模型 (`models/`) | 0% | > 70% |
+| API 路由 (`api/`) | 部分 (9 tests) | > 80% |
+| 数据模型 (`models/`) | 已通过 DB 集成测试覆盖 | > 70% |
 | 工具函数 (`utils/`) | 0% (空文件) | — |
-| 总体 | ~60% | > 80% |
+| 总体 | ~70% | > 80% |
+
+### test_rides_db.py（6 个）
+
+| # | 测试 | 验证内容 |
+|---|------|---------|
+| 1 | `test_full_ride_lifecycle` | 注册→登录→开始骑行→结束骑行 完整流程 |
+| 2 | `test_list_rides_pagination` | 骑行列表分页（limit/offset） |
+| 3 | `test_ride_isolation_between_users` | 用户 A 看不到用户 B 的骑行记录 |
+| 4 | `test_ride_not_found` | 访问不存在的骑行返回 404 |
+| 5 | `test_duplicate_username_registration` | 重复用户名注册返回 400 |
+| 6 | `test_detection_with_ride` | 创建骑行后进行故障检测并关联 ride_id |
