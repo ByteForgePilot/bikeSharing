@@ -1,25 +1,26 @@
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-sqlalchemy==2.0.36
-alembic==1.14.0
-asyncpg==0.30.0
-pydantic==2.10.3
-pydantic-settings==2.7.0
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-multipart==0.0.18
-redis==5.2.1
+fastapi>=0.115
+uvicorn[standard]>=0.34
+sqlalchemy>=2.0
+alembic>=1.14
+asyncpg>=0.30
+pydantic>=2.10
+pydantic-settings>=2.7
+python-jose[cryptography]>=3.3
+passlib[bcrypt]>=1.7,<1.8
+bcrypt<4
+python-multipart>=0.0.18
+redis>=5.2
 
 # Signal processing
-numpy==2.2.1
-scipy==1.14.1
-librosa==0.10.2
+numpy>=2.2
+scipy>=1.14
+librosa>=0.10
 
 # ML
-scikit-learn==1.6.0
-joblib==1.4.2
+scikit-learn>=1.6
+joblib>=1.4
 
 # Testing
-pytest==8.3.4
-pytest-asyncio==0.24.0
-httpx==0.28.1
+pytest>=8.3
+pytest-asyncio>=0.24
+httpx>=0.28

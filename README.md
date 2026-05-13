@@ -27,9 +27,30 @@
 - Python 3.11+
 - Node.js 20+
 - Docker & Docker Compose
+- Conda / Miniforge（推荐）或 venv
 - Expo CLI (`npm install -g expo-cli`)
 
 ### 启动后端
+
+**方式一：Conda（推荐）**
+
+```bash
+# 创建环境（首次）
+conda env create -f environment.yml
+
+# 激活环境
+conda activate bikeSharing
+
+# 后续更新环境
+conda env update -f environment.yml --prune
+
+# 启动服务
+docker-compose up -d              # 启动 PostgreSQL + Redis
+cd backend
+uvicorn app.main:app --reload
+```
+
+**方式二：venv + pip**
 
 ```bash
 docker-compose up -d              # 启动 PostgreSQL + Redis
@@ -37,7 +58,7 @@ cd backend
 python -m venv venv
 source venv/bin/activate          # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cd app && uvicorn main:app --reload
+uvicorn app.main:app --reload
 ```
 
 ### 启动移动端

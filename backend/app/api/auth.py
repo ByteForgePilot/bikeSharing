@@ -41,7 +41,7 @@ def create_access_token(data: dict) -> str:
 def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
-        user_id: int = payload.get("sub")
+        user_id = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
         return {"id": user_id, "username": payload.get("username", "")}
@@ -70,7 +70,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     user = _users.get(form_data.username)
     if not user or not pwd_context.verify(form_data.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token = create_access_token({"sub": user["id"], "username": user["username"]})
+    token = create_access_token({"sub": str(user["id"]), "username": user["username"]})
     return Token(access_token=token)
 
 

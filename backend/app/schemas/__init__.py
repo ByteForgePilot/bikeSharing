@@ -24,6 +24,20 @@ class AudioSegment(BaseModel):
     features: List[float] = []
 
 
+class WheelWobbleRequest(BaseModel):
+    accelerometer_data: List[SensorSample]
+    sample_rate: float = 50.0
+
+
+class HandlebarRequest(BaseModel):
+    gyroscope_data: List[SensorSample]
+    sample_rate: float = 50.0
+
+
+class ChainNoiseRequest(BaseModel):
+    audio_features: List[float]
+
+
 class FaultDetectionResult(BaseModel):
     ride_id: int
     wheel_wobble: Optional[dict] = None
