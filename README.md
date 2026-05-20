@@ -211,7 +211,7 @@ Docker Compose 启动时会自动将 `localhost` 替换为容器主机名 (`db`/
 
 | 文档 | 内容 | 适合 |
 |------|------|------|
-| [00-团队配置指南](docs/00-team-setup.md) | 零基础工具安装 (60-90min) | 新成员 |
+| [00-团队配置指南](docs/00-team-setup.md) | 零基础工具安装 + Git 工作流 + FAQ | 新成员 |
 | [01-架构](docs/01-architecture.md) | 系统全景、技术选型、数据流 | 全体 |
 | [02-API 参考](docs/02-api-reference.md) | 14 端点完整参考 | 后端/移动端 |
 | [03-数据库设计](docs/03-database-design.md) | ER 图、DDL、ORM 模型 | 后端 |
@@ -221,8 +221,6 @@ Docker Compose 启动时会自动将 `localhost` 替换为容器主机名 (`db`/
 | [07-ML 流水线](docs/07-ml-pipeline.md) | 实验环境、特征工程、模型训练 | 算法 |
 | [08-部署运维](docs/08-devops-deployment.md) | Docker、CI/CD、环境变量 | 后端/全体 |
 | [09-测试策略](docs/09-testing-strategy.md) | 32 测试的分层结构 | 全体 |
-| [10-协作流程](docs/10-development-workflow.md) | Git 工作流、环境管理、FAQ | 全体 |
-| [11-运行指南](docs/11-run-guide.md) | 从零到运行的完整步骤+排查 | 全体 |
 
 ## 检测数据流
 

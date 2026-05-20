@@ -2,6 +2,8 @@
 
 > 面向从未接触过本项目的队友。每一步都附带验证命令和国内镜像加速方案。
 > 预计耗时：**60-90 分钟**（取决于网络速度）。
+>
+> **工具装完后，日常开发只需 `docker compose up -d`。快速启动看 README。**
 
 ---
 
@@ -496,3 +498,5 @@ docker compose down -v                  # 停止 + 清空数据
 | 后端工程师 | 00-team-setup, 01-architecture, 02-api-reference, 03-database-design, 08-devops, 09-testing |
 | 移动端工程师 | 00-team-setup, 01-architecture, 02-api-reference, 05-sensor-guide, 06-mobile-development |
 | 算法/数据工程师 | 00-team-setup, 01-architecture, 04-algorithms, 05-sensor-guide, 07-ml-pipeline |
+
+> 日常开发参考 README 的"一键启动"和"常用命令"。

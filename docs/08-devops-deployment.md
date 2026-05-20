@@ -11,31 +11,25 @@
 
 ### 前置条件
 
-- Docker & Docker Compose 已安装并运行
-- Conda / Miniforge（Python 环境管理）
-- Node.js 20+（移动端）
+- Docker Desktop（唯一必需）
+- Node.js 20+（仅移动端开发需要）
+- Python/Conda 不再必需 — Docker 已管理所有 Python 依赖
 
-### 一键启动所有服务
+### 一键启动（团队统一环境）
 
 ```bash
-# 1. 启动基础设施 (PostgreSQL + Redis)
-docker compose up -d
+docker compose up -d                 # 后端全家桶: DB + Redis + Backend (含热重载)
+docker compose --profile ml up -d    # 加 Jupyter Lab (算法开发)
 
-# 2. 启动后端
-conda activate bikeSharing
-cd backend
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# 3. 启动移动端
-cd mobile
-npm install
-npx expo start
+# 验证
+curl http://localhost:8000/api/health  # → {"status":"ok"}
 ```
 
-### 仅启动基础设施
+### 本地开发模式
 
 ```bash
-docker compose up -d db redis
+docker compose up -d db redis        # 仅基础设施
+cd backend && uvicorn app.main:app --reload  # 后端本地跑 (IDE 调试)
 ```
 
 ---
@@ -44,9 +38,10 @@ docker compose up -d db redis
 
 ```yaml
 services:
-  db:        # PostgreSQL 16 Alpine
-  redis:     # Redis 7 Alpine
-  backend:   # FastAPI (从 Dockerfile 构建)
+  db:        # PostgreSQL 16 Alpine (5432)
+  redis:     # Redis 7 Alpine (6379, 持久化)
+  backend:   # FastAPI (从 Dockerfile 构建, 8000, 热重载)
+  jupyter:   # Jupyter Lab (profile: ml, 8888, 可选)
 ```
 
 ### 服务间网络
@@ -77,9 +72,9 @@ host.docker.internal / localhost
 ```yaml
 image: postgres:16-alpine
 environment:
-  POSTGRES_USER: postgres
-  POSTGRES_PASSWORD: postgres
-  POSTGRES_DB: bikesharing
+  POSTGRES_USER: ${POSTGRES_USER:-postgres}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+  POSTGRES_DB: ${POSTGRES_DB:-bikesharing}
 ports: "5432:5432"
 volumes:
   - pgdata:/var/lib/postgresql/data   # 数据持久化
@@ -92,6 +87,8 @@ healthcheck:
 ```yaml
 image: redis:7-alpine
 ports: "6379:6379"
+volumes:
+  - redisdata:/data                   # RDB/AOF 持久化
 healthcheck:
   test: redis-cli ping
   interval: 5s, timeout: 3s, retries: 5
@@ -99,18 +96,28 @@ healthcheck:
 
 **Backend (`backend`)**
 ```yaml
-build: ./backend                       # 使用 Dockerfile
+build: ./backend                       # python:3.12-slim
 ports: "8000:8000"
-environment:
-  DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/bikesharing
-  DATABASE_URL_SYNC: postgresql://postgres:postgres@db:5432/bikesharing
+environment:                           # 使用 ${VAR:-default} fallback
+  DATABASE_URL: ...@db:5432/...
   REDIS_URL: redis://redis:6379
+  SECRET_KEY: ${SECRET_KEY:-...}
 depends_on:
-  db: { condition: service_healthy }   # 等待 PostgreSQL 就绪
-  redis: { condition: service_healthy } # 等待 Redis 就绪
+  db: { condition: service_healthy }
+  redis: { condition: service_healthy }
 volumes:
   - ./backend:/app                     # 热重载
 command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Jupyter (`jupyter`, 可选)**
+```yaml
+image: jupyter/scipy-notebook:python-3.11
+profiles: [ml]                         # docker compose --profile ml up
+ports: "8888:8888"
+volumes:
+  - ./ml:/home/jovyan/work             # Notebook 工作目录
+  - ./backend:/home/jovyan/backend     # 后端代码参考
 ```
 
 注意：Docker 内的 backend 连接 `db` 和 `redis` 使用 Compose 服务名（Docker DNS 解析），
@@ -149,21 +156,12 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 所有配置通过 `Settings` (pydantic-settings) 管理，优先级: 环境变量 > `.env` 文件 > 默认值。
 
-### 参考 `.env` 文件
+### 环境变量
 
-```bash
-# .env (不纳入版本控制)
-APP_NAME=bikeSharing API
-DEBUG=true
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/bikesharing
-DATABASE_URL_SYNC=postgresql://postgres:postgres@localhost:5432/bikesharing
-REDIS_URL=redis://localhost:6379
-SECRET_KEY=<生成一个随机密钥>
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-SENSOR_SAMPLE_RATE=50
-AUDIO_SAMPLE_RATE=44100
-MAX_RIDE_DURATION_SECONDS=3600
-```
+所有配置通过 `backend/app/config.py` (pydantic-settings) 管理，优先级: 环境变量 > `.env` 文件 > 默认值。
+
+**初始化：** `cp .env.example .env`，然后按需修改。
+完整变量清单见 `.env.example`。
 
 ### 生成 SECRET_KEY
 

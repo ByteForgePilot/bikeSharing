@@ -144,7 +144,7 @@ docker compose restart backend     # 重启后端（代码改动后自动热重�
 
 | 角色 | 推荐阅读顺序 |
 |------|-------------|
-| 新成员 | `docs/00-team-setup.md` → `docs/01-architecture.md` → `docs/11-run-guide.md` |
+| 新成员 | `docs/00-team-setup.md` → `docs/01-architecture.md` |
 | 后端 | `docs/01-architecture.md` → `docs/02-api-reference.md` → `docs/03-database-design.md` → `docs/09-testing-strategy.md` |
 | 移动端 | `docs/01-architecture.md` → `docs/05-sensor-guide.md` → `docs/06-mobile-development.md` |
 | 算法 | `docs/01-architecture.md` → `docs/04-fault-detection-algorithms.md` → `docs/07-ml-pipeline.md` |
