@@ -48,8 +48,9 @@ export default function HomeScreen() {
         if (!rideId) throw new Error("未返回骑行编号");
       } else {
         rideId = `${Date.now()}_${bikeId.trim()}`;
-        await offlineStorage.createRide(rideId, bikeId.trim());
       }
+      // Always create local ride directory so offline fallback works
+      await offlineStorage.createRide(rideId, bikeId.trim());
 
       router.push({
         pathname: "/(tabs)/ride",

@@ -121,12 +121,13 @@ export async function uploadSensorData(
   rideId: number,
   accelerometer: Array<{ x: number; y: number; z: number; timestamp: number }>,
   gyroscope: Array<{ x: number; y: number; z: number; timestamp: number }>,
+  gps: Array<{ lat: number; lng: number; altitude: number | null; accuracy: number | null; timestamp: number }>,
   sampleRate: number,
   token: string
 ) {
   return request(`/api/rides/${rideId}/sensor-data`, {
     method: "POST",
-    body: { accelerometer, gyroscope, sample_rate: sampleRate },
+    body: { accelerometer, gyroscope, gps, sample_rate: sampleRate },
     token,
   });
 }
@@ -182,4 +183,59 @@ export async function detectHandlebarMisalignment(
 
 export async function getDetectionReport(rideId: number, token: string) {
   return request(`/api/detection/report/${rideId}`, { token });
+}
+
+// --- File Upload (multipart/form-data) ---
+
+export async function uploadFile<T = unknown>(
+  endpoint: string,
+  fileUri: string,
+  fieldName: string,
+  mimeType: string,
+  token?: string,
+  additionalFields?: Record<string, string>
+): Promise<T> {
+  const formData = new FormData();
+  formData.append(fieldName, {
+    uri: fileUri,
+    name: fileUri.split("/").pop() ?? "file",
+    type: mimeType,
+  } as any);
+
+  if (additionalFields) {
+    for (const [key, value] of Object.entries(additionalFields)) {
+      formData.append(key, value);
+    }
+  }
+
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${BASE_URL}${endpoint}`, {
+    method: "POST",
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Upload Error ${response.status}: ${error}`);
+  }
+
+  return response.json();
+}
+
+export async function uploadAudioFile(
+  rideId: number,
+  fileUri: string,
+  token: string
+) {
+  // Platform-appropriate MIME: .m4a on Android (AAC/MP4), .wav on iOS
+  const mimeType = fileUri.endsWith(".m4a") ? "audio/mp4" : "audio/wav";
+  return uploadFile<{
+    ride_id: number;
+    chain_noise: { detected: string; confidence: number; detail: string };
+  }>(`/api/rides/${rideId}/audio`, fileUri, "audio_file", mimeType, token);
 }

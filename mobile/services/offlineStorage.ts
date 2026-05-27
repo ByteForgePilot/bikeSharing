@@ -1,7 +1,9 @@
 import * as FileSystem from "expo-file-system";
-import type { SensorDataPoint } from "./sensors";
+import type { SensorDataPoint, GPSDataPoint } from "./sensors";
 
 const RIDES_DIR = `${FileSystem.documentDirectory}rides/`;
+
+export type SyncStatusType = "local" | "syncing" | "synced" | "failed";
 
 export interface OfflineRideMeta {
   rideId: string;
@@ -9,6 +11,8 @@ export interface OfflineRideMeta {
   startedAt: string;
   endedAt: string | null;
   status: "active" | "completed";
+  syncStatus?: SyncStatusType;
+  hasAudio?: boolean;
 }
 
 export interface OfflineRide {
@@ -16,6 +20,7 @@ export interface OfflineRide {
   sensors: {
     accelerometer: SensorDataPoint[];
     gyroscope: SensorDataPoint[];
+    gps: GPSDataPoint[];
     sampleRate: number;
   };
 }
@@ -45,34 +50,39 @@ export async function finishRide(
   rideId: string,
   accelerometer: SensorDataPoint[],
   gyroscope: SensorDataPoint[],
+  gps: GPSDataPoint[],
   sampleRate: number
 ): Promise<void> {
   const rideDir = `${RIDES_DIR}${rideId}/`;
 
-  // Update meta
   const metaStr = await FileSystem.readAsStringAsync(`${rideDir}meta.json`);
   const meta: OfflineRideMeta = JSON.parse(metaStr);
   meta.endedAt = new Date().toISOString();
   meta.status = "completed";
   await FileSystem.writeAsStringAsync(`${rideDir}meta.json`, JSON.stringify(meta));
 
-  // Save all sensor data
   await FileSystem.writeAsStringAsync(
     `${rideDir}sensor_data.json`,
-    JSON.stringify({ accelerometer, gyroscope, sampleRate })
+    JSON.stringify({ accelerometer, gyroscope, gps, sampleRate })
   );
 }
 
 export async function saveSensorChunk(
   rideId: string,
   accelerometer: SensorDataPoint[],
-  gyroscope: SensorDataPoint[]
+  gyroscope: SensorDataPoint[],
+  gps: GPSDataPoint[]
 ): Promise<void> {
   const rideDir = `${RIDES_DIR}${rideId}/`;
+  // Ensure directory exists (may not if ride started online then went offline)
+  const dirInfo = await FileSystem.getInfoAsync(rideDir);
+  if (!dirInfo.exists) {
+    await FileSystem.makeDirectoryAsync(rideDir, { intermediates: true });
+  }
   const chunkFile = `${rideDir}chunk_${Date.now()}.json`;
   await FileSystem.writeAsStringAsync(
     chunkFile,
-    JSON.stringify({ accelerometer, gyroscope })
+    JSON.stringify({ accelerometer, gyroscope, gps })
   );
 }
 
@@ -98,22 +108,27 @@ export async function getRide(rideId: string): Promise<OfflineRide | null> {
     const metaStr = await FileSystem.readAsStringAsync(`${rideDir}meta.json`);
     const meta: OfflineRideMeta = JSON.parse(metaStr);
 
-    let sensors = { accelerometer: [] as SensorDataPoint[], gyroscope: [] as SensorDataPoint[], sampleRate: 20 };
+    let sensors = {
+      accelerometer: [] as SensorDataPoint[],
+      gyroscope: [] as SensorDataPoint[],
+      gps: [] as GPSDataPoint[],
+      sampleRate: 20,
+    };
 
-    // Try to read the full sensor_data.json (written at finish)
     const sensorFile = await FileSystem.getInfoAsync(`${rideDir}sensor_data.json`);
     if (sensorFile.exists) {
       const sensorStr = await FileSystem.readAsStringAsync(`${rideDir}sensor_data.json`);
-      sensors = JSON.parse(sensorStr);
+      const parsed = JSON.parse(sensorStr);
+      sensors = { ...sensors, ...parsed };
     } else {
-      // Merge chunk files
       const files = await FileSystem.readDirectoryAsync(rideDir);
       for (const f of files) {
         if (f.startsWith("chunk_")) {
           const chunkStr = await FileSystem.readAsStringAsync(`${rideDir}${f}`);
           const chunk = JSON.parse(chunkStr);
-          sensors.accelerometer.push(...chunk.accelerometer);
-          sensors.gyroscope.push(...chunk.gyroscope);
+          sensors.accelerometer.push(...(chunk.accelerometer || []));
+          sensors.gyroscope.push(...(chunk.gyroscope || []));
+          sensors.gps.push(...(chunk.gps || []));
         }
       }
     }
@@ -124,7 +139,35 @@ export async function getRide(rideId: string): Promise<OfflineRide | null> {
   }
 }
 
-/** Check if backend API is reachable */
+export async function deleteRide(rideId: string): Promise<void> {
+  const rideDir = `${RIDES_DIR}${rideId}/`;
+  await FileSystem.deleteAsync(rideDir, { idempotent: true });
+}
+
+export async function setSyncStatus(rideId: string, status: SyncStatusType): Promise<void> {
+  const rideDir = `${RIDES_DIR}${rideId}/`;
+  try {
+    const metaStr = await FileSystem.readAsStringAsync(`${rideDir}meta.json`);
+    const meta: OfflineRideMeta = JSON.parse(metaStr);
+    meta.syncStatus = status;
+    await FileSystem.writeAsStringAsync(`${rideDir}meta.json`, JSON.stringify(meta));
+  } catch {
+    // ride directory may not exist
+  }
+}
+
+export async function saveAudioUri(rideId: string, audioUri: string): Promise<void> {
+  const rideDir = `${RIDES_DIR}${rideId}/`;
+  const destUri = `${rideDir}audio_recording.wav`;
+  await FileSystem.copyAsync({ from: audioUri, to: destUri });
+  const metaStr = await FileSystem.readAsStringAsync(`${rideDir}meta.json`);
+  const meta: OfflineRideMeta = JSON.parse(metaStr);
+  meta.hasAudio = true;
+  await FileSystem.writeAsStringAsync(`${rideDir}meta.json`, JSON.stringify(meta));
+}
+
+export { RIDES_DIR };
+
 export async function isBackendReachable(): Promise<boolean> {
   const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
   try {

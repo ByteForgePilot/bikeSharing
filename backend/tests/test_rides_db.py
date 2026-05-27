@@ -203,7 +203,10 @@ async def test_detection_with_ride(client):
     # End the ride
     await client.post(f"/api/rides/{ride_id}/end", headers=headers)
 
-    # Report
+    # Report — after running detection, report should read persisted result
     resp = await client.get(f"/api/detection/report/{ride_id}", headers=headers)
     assert resp.status_code == 200
-    assert resp.json()["overall_status"] == "pending"
+    data = resp.json()
+    assert data["wheel_wobble"] is not None
+    assert data["wheel_wobble"]["detected"] in ("normal", "suspect", "fault")
+    assert data["overall_status"] != "pending"

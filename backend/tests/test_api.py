@@ -49,6 +49,13 @@ async def test_wheel_wobble_detection(client):
     token = login_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
+    # Create a ride first (detection requires a valid ride_id FK)
+    ride_resp = await client.post(
+        "/api/rides/start?bike_id=bike_test",
+        headers=headers,
+    )
+    ride_id = ride_resp.json()["ride"]["id"]
+
     samples = []
     for i in range(125):
         t = i / 50.0
@@ -56,7 +63,7 @@ async def test_wheel_wobble_detection(client):
         samples.append({"x": wobble, "y": 0.1, "z": 0.2, "timestamp": t})
 
     resp = await client.post(
-        "/api/detection/wheel-wobble/1",
+        f"/api/detection/wheel-wobble/{ride_id}",
         json={"accelerometer_data": samples, "sample_rate": 50.0},
         headers=headers,
     )

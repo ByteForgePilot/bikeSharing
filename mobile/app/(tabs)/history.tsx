@@ -13,7 +13,7 @@ import {
 import { useAuthContext } from "../../hooks/AuthContext";
 import * as api from "../../services/api";
 import * as offlineStorage from "../../services/offlineStorage";
-import type { OfflineRideMeta } from "../../services/offlineStorage";
+import type { OfflineRideMeta, SyncStatusType } from "../../services/offlineStorage";
 import { formatDate } from "../../utils/formatters";
 
 // Enable LayoutAnimation on Android
@@ -27,6 +27,8 @@ interface RideDisplayItem {
   started_at: string;
   ended_at: string | null;
   status: string;
+  syncStatus?: SyncStatusType;
+  dataSource: "server" | "local";
 }
 
 type FilterMode = "全部" | "已完成" | "进行中";
@@ -40,7 +42,7 @@ function ExpandIcon({ expanded }: { expanded: boolean }) {
 }
 
 export default function HistoryScreen() {
-  const { token, online } = useAuthContext();
+  const { token, online, isSyncing, syncPendingRides } = useAuthContext();
   const [rides, setRides] = useState<RideDisplayItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +62,7 @@ export default function HistoryScreen() {
             started_at: r.started_at,
             ended_at: r.ended_at,
             status: r.status,
+            dataSource: "server" as const,
           }))
         );
       } else {
@@ -71,6 +74,8 @@ export default function HistoryScreen() {
             started_at: m.startedAt,
             ended_at: m.endedAt,
             status: m.status,
+            syncStatus: m.syncStatus ?? "local",
+            dataSource: "local" as const,
           }))
         );
       }
@@ -85,6 +90,13 @@ export default function HistoryScreen() {
   useEffect(() => {
     fetchRides();
   }, [fetchRides]);
+
+  const handleSync = async () => {
+    const result = await syncPendingRides();
+    if (result.uploaded > 0 || result.failed > 0) {
+      fetchRides();
+    }
+  };
 
   const toggleExpand = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -164,7 +176,17 @@ export default function HistoryScreen() {
               )}
               <View style={styles.detailItem}>
                 <Text style={styles.detailLabel}>数据来源</Text>
-                <Text style={styles.detailValue}>{online ? "服务器" : "本地文件"}</Text>
+                <Text style={styles.detailValue}>
+                  {item.dataSource === "server"
+                    ? "服务器"
+                    : item.syncStatus === "syncing"
+                      ? "同步中..."
+                      : item.syncStatus === "synced"
+                        ? "已同步"
+                        : item.syncStatus === "failed"
+                          ? "同步失败"
+                          : "本地 (待同步)"}
+                </Text>
               </View>
             </View>
           </View>
@@ -200,11 +222,23 @@ export default function HistoryScreen() {
       <View style={styles.header}>
         <View style={styles.headerRow}>
           <Text style={styles.title}>骑行历史</Text>
-          {!online && (
-            <View style={styles.offlineTag}>
-              <Text style={styles.offlineTagText}>📱 本地</Text>
-            </View>
-          )}
+          <View style={styles.headerActions}>
+            {!online && (
+              <View style={styles.offlineTag}>
+                <Text style={styles.offlineTagText}>📱 本地</Text>
+              </View>
+            )}
+            {online && (
+              <TouchableOpacity
+                style={[styles.syncBtn, isSyncing && { opacity: 0.6 }]}
+                onPress={handleSync}
+                disabled={isSyncing}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.syncBtnText}>{isSyncing ? "⏳" : "🔄"} 同步</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
@@ -270,10 +304,13 @@ const styles = StyleSheet.create({
 
   // Header
   header: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: 16 },
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 14 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   title: { fontSize: 26, fontWeight: "800", color: "#1E293B" },
   offlineTag: { backgroundColor: "#FEF3C7", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
   offlineTagText: { fontSize: 11, fontWeight: "600", color: "#B45309" },
+  syncBtn: { backgroundColor: "#DBEAFE", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  syncBtnText: { fontSize: 12, fontWeight: "600", color: "#1D4ED8" },
 
   // Stats
   statsRow: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: 16, padding: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 6, elevation: 2 },

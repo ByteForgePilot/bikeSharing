@@ -11,28 +11,25 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSMicrophoneUsageDescription": "需要使用麦克风检测链条异响",
-        "NSMotionUsageDescription": "需要访问运动传感器检测车辆故障"
+        "NSMotionUsageDescription": "需要访问运动传感器检测车辆故障",
+        "NSLocationWhenInUseUsageDescription": "需要记录骑行轨迹"
       }
     },
     "android": {
       "permissions": [
         "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
         "ACCESS_FINE_LOCATION",
-        "ACTIVITY_RECOGNITION",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
-        "RECORD_AUDIO",
-        "ACCESS_FINE_LOCATION",
-        "ACTIVITY_RECOGNITION",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "ACCESS_COARSE_LOCATION",
+        "ACTIVITY_RECOGNITION"
       ],
       "package": "com.anonymous.bikesharing"
     },
     "plugins": [
       "expo-router",
       "expo-sensors",
-      "expo-av"
+      "expo-av",
+      "expo-location"
     ]
   }
 }

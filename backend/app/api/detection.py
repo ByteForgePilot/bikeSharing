@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.auth import get_current_user
+from app.database import get_db
+from app.core.security import get_current_user
 from app.models.user import User
-from app.services.sensor_analysis import analyze_wheel_wobble
-from app.services.audio_analysis import analyze_chain_noise
-from app.services.fault_classifier import classify_handlebar
 from app.schemas import WheelWobbleRequest, HandlebarRequest, ChainNoiseRequest
+from app.services import detection as detection_service
 
 router = APIRouter()
 
@@ -22,8 +22,6 @@ router = APIRouter()
 - `suspect`: 振动在阈值一半到阈值之间 → 疑似故障
 - `fault`: 振动 ≥ 阈值 → 确认故障
 - `unknown`: 数据不足（需要 ≥ 2 秒数据）
-
-**阈值参数**可通过 `wobble_threshold` 调整。
 """,
     responses={
         200: {
@@ -42,16 +40,17 @@ router = APIRouter()
             },
         },
         401: {"description": "未登录或 Token 过期"},
-        422: {"description": "请求体格式不正确，请参考下方 Schema"},
+        422: {"description": "请求体格式不正确"},
     },
 )
 async def detect_wheel_wobble(
     ride_id: int,
     body: WheelWobbleRequest,
     user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     data = [d.model_dump() for d in body.accelerometer_data]
-    result = analyze_wheel_wobble(data, body.sample_rate)
+    result = await detection_service.detect_wheel_wobble(db, ride_id, data, body.sample_rate)
     return {"ride_id": ride_id, "wheel_wobble": result}
 
 
@@ -67,9 +66,6 @@ async def detect_wheel_wobble(
 - `suspect`: 异常分数中等 → 疑似故障
 - `fault`: 异常分数高 → 确认故障
 - `unknown`: 未传入特征数据
-
-**注意：** 当前接收的是预计算的**特征向量**（非原始音频）。
-特征值建议使用 MFCC 均值（13 维）或类似频谱特征。
 """,
     responses={
         200: {
@@ -94,8 +90,9 @@ async def detect_chain_noise(
     ride_id: int,
     body: ChainNoiseRequest,
     user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    result = analyze_chain_noise(body.audio_features)
+    result = await detection_service.detect_chain_noise(db, ride_id, body.audio_features)
     return {"ride_id": ride_id, "chain_noise": result}
 
 
@@ -114,9 +111,6 @@ async def detect_chain_noise(
 - `suspect`: 偏移在阈值一半到阈值之间 → 疑似故障
 - `fault`: 偏移 ≥ 阈值 → 确认故障
 - `unknown`: 数据不足（需要 ≥ 3 秒数据）
-
-**重要：** 此算法假设用户在**直线骑行**期间采集数据。
-转弯时的偏航角偏移是正常的，应在数据采集前剔除弯道路段。
 """,
     responses={
         200: {
@@ -141,26 +135,22 @@ async def detect_handlebar_misalignment(
     ride_id: int,
     body: HandlebarRequest,
     user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     data = [d.model_dump() for d in body.gyroscope_data]
-    result = classify_handlebar(data, body.sample_rate)
+    result = await detection_service.detect_handlebar(db, ride_id, data, body.sample_rate)
     return {"ride_id": ride_id, "handlebar_misalignment": result}
 
 
 @router.get(
     "/report/{ride_id}",
     summary="获取检测报告",
-    description="获取指定骑行的综合故障检测报告（当前为 Stub，返回空结果）。",
+    description="获取指定骑行的综合故障检测报告。",
     responses={401: {"description": "未登录或 Token 过期"}},
 )
 async def get_detection_report(
     ride_id: int,
     user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    return {
-        "ride_id": ride_id,
-        "wheel_wobble": None,
-        "chain_noise": None,
-        "handlebar_misalignment": None,
-        "overall_status": "pending",
-    }
+    return await detection_service.get_detection_report(db, ride_id)
