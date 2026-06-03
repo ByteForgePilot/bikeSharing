@@ -34,13 +34,25 @@ class GpsCollector(private val context: Context) : LocationListener {
         try {
             locationManager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
-                1000L,
+                100L,
                 0f,
                 this
             )
-            Log.i(TAG, "GPS已启动 1Hz")
+            Log.i(TAG, "GPS已启动 10Hz")
         } catch (e: SecurityException) {
             Log.e(TAG, "GPS权限被拒绝: ${e.message}")
+        }
+
+        try {
+            locationManager.requestLocationUpdates(
+                LocationManager.NETWORK_PROVIDER,
+                5000L,
+                0f,
+                this
+            )
+            Log.i(TAG, "网络定位已启动 (备用)")
+        } catch (e: Exception) {
+            Log.w(TAG, "网络定位不可用: ${e.message}")
         }
     }
 

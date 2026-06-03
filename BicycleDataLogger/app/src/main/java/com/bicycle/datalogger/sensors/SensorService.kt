@@ -14,6 +14,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.bicycle.datalogger.MainActivity
 import kotlinx.coroutines.*
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.io.File
@@ -137,7 +138,7 @@ class SensorService : Service() {
                 Log.e(TAG, "采集出错: ${e.message}", e)
                 _sessionState.value = SessionState.Error(e.message ?: "未知错误")
             } finally {
-                withContext(Dispatchers.Main) { cleanupSession() }
+                withContext(NonCancellable + Dispatchers.Main) { cleanupSession() }
             }
         }
     }
@@ -153,10 +154,10 @@ class SensorService : Service() {
 
     private fun cleanupSession() {
         timerJob?.cancel()
-        accelCollector.stop()
-        gpsCollector.stop()
-        gyroCollector.stop()
-        audioCollector.stop()
+        try { accelCollector.stop() } catch (_: Exception) {}
+        try { gpsCollector.stop() } catch (_: Exception) {}
+        try { gyroCollector.stop() } catch (_: Exception) {}
+        try { audioCollector.stop() } catch (_: Exception) {}
 
         try {
             combinedWriter?.flush()
@@ -210,21 +211,21 @@ class SensorService : Service() {
         val writer = combinedWriter ?: return
         withContext(Dispatchers.Main) { accelCollector.start(writer) }
         try { delay(Long.MAX_VALUE) } catch (_: CancellationException) {}
-        accelCollector.stop()
+        withContext(Dispatchers.Main) { accelCollector.stop() }
     }
 
     private suspend fun startGpsWriter() {
         val writer = combinedWriter ?: return
         withContext(Dispatchers.Main) { gpsCollector.start(writer) }
         try { delay(Long.MAX_VALUE) } catch (_: CancellationException) {}
-        gpsCollector.stop()
+        withContext(Dispatchers.Main) { gpsCollector.stop() }
     }
 
     private suspend fun startGyroWriter() {
         val writer = combinedWriter ?: return
         withContext(Dispatchers.Main) { gyroCollector.start(writer) }
         try { delay(Long.MAX_VALUE) } catch (_: CancellationException) {}
-        gyroCollector.stop()
+        withContext(Dispatchers.Main) { gyroCollector.stop() }
     }
 
     private suspend fun startAudioWriters() {

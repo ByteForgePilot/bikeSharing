@@ -184,7 +184,7 @@ private fun SensorStatusCard(running: Boolean) {
             Spacer(modifier = Modifier.height(8.dp))
 
             SensorRow("加速度计", "100 Hz", "三轴 (Z=垂直方向)", running)
-            SensorRow("GPS", "1 Hz", "速度 + 航向角", running)
+            SensorRow("GPS", "10 Hz", "速度 + 航向角", running)
             SensorRow("陀螺仪", "50 Hz", "偏航角速度 (车把)", running)
             SensorRow("麦克风", "8 kHz", "16-bit PCM 单声道", running)
         }

@@ -82,18 +82,21 @@ class AudioCollector {
     }
 
     fun stop() {
-        isRecording = false
-        audioRecord?.apply {
-            stop()
-            release()
+        synchronized(this) {
+            if (audioRecord == null && pcmFile == null && metaWriter == null) return
+            isRecording = false
+            audioRecord?.apply {
+                stop()
+                release()
+            }
+            audioRecord = null
+            try { pcmFile?.close() } catch (_: Exception) {}
+            pcmFile = null
+            try { metaWriter?.flush() } catch (_: Exception) {}
+            try { metaWriter?.close() } catch (_: Exception) {}
+            metaWriter = null
+            Log.i(TAG, "音频录制已停止")
         }
-        audioRecord = null
-        pcmFile?.close()
-        pcmFile = null
-        metaWriter?.flush()
-        metaWriter?.close()
-        metaWriter = null
-        Log.i(TAG, "音频录制已停止")
     }
 
     companion object {
