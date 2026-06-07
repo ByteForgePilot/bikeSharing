@@ -1,4 +1,4 @@
-# --- Python ---
+﻿# --- Python ---
 __pycache__/
 .pytest_cache/
 *.py[cod]
@@ -12,6 +12,14 @@ venv/
 .env
 *.egg
 
+# --- Android (BicycleDataLogger) ---
+BicycleDataLogger/.gradle/
+BicycleDataLogger/build/
+BicycleDataLogger/app/build/
+BicycleDataLogger/local.properties
+*.apk
+*.aab
+
 # --- ML ---
 ml/data/raw/*
 ml/models/*
@@ -22,20 +30,8 @@ ml/models/*
 !ml/data/raw/.gitkeep
 !ml/models/.gitkeep
 
-# --- Node / React Native ---
-node_modules/
-.expo/
-dist/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-*.orig.*
-web-build/
+# --- Old Expo mobile (deprecated, pending deletion) ---
+mobile/
 
 # --- IDE ---
 .vscode/

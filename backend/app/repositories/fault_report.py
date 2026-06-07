@@ -1,33 +1,43 @@
+﻿import json
+from typing import Optional
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.fault_report import FaultReport
 
 
-async def upsert(db: AsyncSession, ride_id: int, result: dict) -> FaultReport:
-    """Create or update a fault report for a ride.
+async def get_by_ride_id(db: AsyncSession, ride_id: int) -> Optional[FaultReport]:
+    result = await db.execute(
+        select(FaultReport).where(FaultReport.ride_id == ride_id)
+    )
+    return result.scalar_one_or_none()
 
-    `result` should be a dict with keys matching FaultReport columns:
-        wheel_wobble_detected, wheel_wobble_confidence, wheel_wobble_detail,
-        chain_noise_detected, chain_noise_confidence, chain_noise_detail,
-        handlebar_detected, handlebar_confidence, handlebar_detail
+
+async def upsert(db: AsyncSession, ride_id: int, data: dict) -> FaultReport:
+    """Insert or update a fault report for a ride.
+
+    data keys can include: tire_score, chain_score, handlebar_score,
+    total_score, recommendation, details_json, wheel_wobble_detail,
+    chain_noise_detail, handlebar_detail, and legacy detected/confidence fields.
     """
-    q = select(FaultReport).where(FaultReport.ride_id == ride_id)
-    existing = (await db.execute(q)).scalar_one_or_none()
+    report = await get_by_ride_id(db, ride_id)
+    if report is None:
+        report = FaultReport(ride_id=ride_id)
+        db.add(report)
 
-    if existing:
-        for key, value in result.items():
-            setattr(existing, key, value)
-        report = existing
-    else:
-        report = FaultReport(ride_id=ride_id, **result)
+    # Update provided fields
+    for key, value in data.items():
+        if hasattr(report, key):
+            setattr(report, key, value)
 
-    db.add(report)
     await db.commit()
     await db.refresh(report)
     return report
 
 
-async def get_by_ride_id(db: AsyncSession, ride_id: int) -> FaultReport | None:
-    q = select(FaultReport).where(FaultReport.ride_id == ride_id)
-    return (await db.execute(q)).scalar_one_or_none()
+async def delete_by_ride_id(db: AsyncSession, ride_id: int) -> None:
+    report = await get_by_ride_id(db, ride_id)
+    if report is not None:
+        await db.delete(report)
+        await db.commit()
