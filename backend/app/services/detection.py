@@ -188,14 +188,14 @@ def _to_api_format(algo_result: dict, fault_type: str) -> dict:
         )
     elif fault_type == "chain":
         detail = (
-            f"{algo_result.get(''prediction'', ''未知'')} "
-            f"conf={algo_result.get(''confidence'', 0):.3f} "
-            f"SNR={algo_result.get(''pedal_snr_db'', 0):.1f}dB"
+            f"{algo_result.get('prediction', '未知')} "
+            f"conf={algo_result.get('confidence', 0):.3f} "
+            f"SNR={algo_result.get('pedal_snr_db', 0):.1f}dB"
         )
     else:
         detail = (
-            f"Δθ={algo_result.get(''delta_theta_deg'', 0):.2f}° "
-            f"bias={algo_result.get(''yaw_bias_rad_s'', 0):.4f}rad/s"
+            f"Δθ={algo_result.get('delta_theta_deg', 0):.2f}° "
+            f"bias={algo_result.get('yaw_bias_rad_s', 0):.4f}rad/s"
         )
 
     return {
@@ -204,4 +204,5 @@ def _to_api_format(algo_result: dict, fault_type: str) -> dict:
         "detail": detail,
         "score": round(score, 2),
     }
+
 
