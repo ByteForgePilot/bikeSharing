@@ -1,6 +1,6 @@
-from app.schemas.detection import (
+﻿from app.schemas.detection import (
     ChainNoiseRequest,
-    FaultDetectionResult,
+    DetectionResult,
     HandlebarRequest,
     SensorSample,
     WheelWobbleRequest,
@@ -13,7 +13,7 @@ __all__ = [
     "WheelWobbleRequest",
     "HandlebarRequest",
     "ChainNoiseRequest",
-    "FaultDetectionResult",
+    "DetectionResult",
     "RideResponse",
     "RideListResponse",
     "SensorDataUpload",
@@ -21,3 +21,4 @@ __all__ = [
     "UserCreate",
     "UserResponse",
 ]
+

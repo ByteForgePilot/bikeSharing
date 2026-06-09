@@ -182,9 +182,9 @@ def _to_api_format(algo_result: dict, fault_type: str) -> dict:
     # Build a human-readable detail string
     if fault_type == "tire":
         detail = (
-            f"P={algo_result.get(''P_value'', 0):.4f} "
-            f"wheel_freq={algo_result.get(''wheel_freq_hz'', 0):.1f}Hz "
-            f"flat={algo_result.get(''flat_fraction'', 0):.0%}"
+            f"P={algo_result.get('P_value', 0):.4f} "
+            f"wheel_freq={algo_result.get('wheel_freq_hz', 0):.1f}Hz "
+            f"flat={algo_result.get('flat_fraction', 0):.0%}"
         )
     elif fault_type == "chain":
         detail = (
@@ -204,3 +204,4 @@ def _to_api_format(algo_result: dict, fault_type: str) -> dict:
         "detail": detail,
         "score": round(score, 2),
     }
+
