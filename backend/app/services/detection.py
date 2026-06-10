@@ -1,4 +1,4 @@
-﻿"""Detection orchestration service --- calls the v3.0 algorithm engine."""
+"""Detection orchestration service --- calls the v3.0 algorithm engine."""
 
 import json
 

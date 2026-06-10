@@ -1,4 +1,4 @@
-﻿"""
+"""
 Detection engine adapter --- bridges API data formats to the v3.0 algorithm.
 
 Accepts two input paths:

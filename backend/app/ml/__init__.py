@@ -1,4 +1,4 @@
-﻿from .bike_health_detector import (
+from .bike_health_detector import (
     AccelSample,
     GyroSample,
     AudioChunk,

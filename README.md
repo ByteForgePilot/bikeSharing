@@ -1,4 +1,4 @@
-﻿# bikeSharing -- Shared Bike Fault Detection Platform
+# bikeSharing -- Shared Bike Fault Detection Platform
 
 Mobile sensor-based shared bike fault detection: ride, collect sensor data, get instant health scores.
 
@@ -54,6 +54,34 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
+
+### 3. Standalone Mode (No Docker)
+
+`ash
+# Backend starts without PostgreSQL/Redis
+cd backend
+python -m uvicorn app.main:app --reload --port 8000
+
+# Only these endpoints are available without DB:
+#   GET  /api/detection/dashboard   -- ECharts dashboard
+#   POST /api/detection/process     -- File upload detection (no auth)
+
+# DB-requiring endpoints (auth, rides, upload) will fail gracefully.
+`
+
+### 4. Run Detection on Local Sensor Data
+
+`ash
+# No server needed -- runs detection directly on data/ files
+cd E:\Project\personal\bikrsharing
+python data/run_detection.py
+
+# Reads data/�的传感器数据.txt + 音频.pcm + 音频_时间戳.csv
+# Runs F1/F2/F3 + composite health score
+# Saves detailed results to data/detection_result.json
+`
+
+The data/ directory contains real sensor data collected by BicycleDataLogger, ready for testing the detection pipeline.
 ### 3. Mobile Data Collection
 
 Open `BicycleDataLogger/` in Android Studio, build and install the APK. The app collects:
@@ -109,6 +137,11 @@ Three-fault detection using the phone''s built-in sensors:
 
 ```
 bikrsharing/
++-- data/                  Real sensor data + detection runner
+|   +-- run_detection.py   Standalone detection script (no server)
+|   +-- 传感器数据.txt        Accelerometer/gyro/GPS CSV
+|   +-- 音频.pcm              16-bit LE PCM audio
+|   +-- 音频_时间戳.csv         Audio timestamp mapping
 +-- BicycleDataLogger/     Native Android data collection app (Kotlin)
 +-- backend/
 |   +-- app/

@@ -1,4 +1,4 @@
-﻿"""Integration tests for v3.0 detection engine."""
+"""Integration tests for v3.0 detection engine."""
 
 import math
 import struct

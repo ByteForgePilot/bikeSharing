@@ -1,4 +1,4 @@
-﻿from app.schemas.detection import (
+from app.schemas.detection import (
     ChainNoiseRequest,
     DetectionResult,
     HandlebarRequest,

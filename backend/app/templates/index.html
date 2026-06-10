@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -295,7 +295,7 @@ document.getElementById('btnDetect').addEventListener('click', async function() 
   form.append('audio_ts', fileState.ts);
 
   try {
-    const resp = await fetch('/api/process', { method: 'POST', body: form });
+    const resp = await fetch('/api/detection/process', { method: 'POST', body: form });
     const data = await resp.json();
     if (data.error) { showError(data.error); return; }
     renderResults(data);
