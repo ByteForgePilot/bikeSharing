@@ -112,7 +112,7 @@ async def dashboard(request: Request):
         audio_ts = parse_audio_ts(ts_text)
         result = run_full_detection(accel, gyro, audio, audio_ts)
     else:
-        result = {"health":{"total_score":0,"level":"unknown","recommendation":"No data files found"}}
+        result = {"health":{"total_score":0,"level":"nodata","recommendation":"请上传检测数据"}}
     # Map to template format: health + f1_charts/f2_charts/f3_charts
     tmpl_data = {
         "health": result["health"],

@@ -422,6 +422,15 @@ function renderResults(data) {
   const h = data.health, s1 = h.sub_scores.tire_wobble, s2 = h.sub_scores.chain_noise, s3 = h.sub_scores.handlebar_misalignment;
   const S = h.total_score;
 
+  // No-data guard: skip rendering if server has no detection data
+  if (h.level === 'nodata') {
+    document.getElementById('rec-banner') && (document.getElementById('rec-banner').textContent = '请上传检测数据');
+    var _sb = document.getElementById('score-badge');
+    if (_sb) { _sb.querySelector('.score-value').textContent = '--'; _sb.querySelector('.score-label').textContent = '等待上传'; }
+    document.getElementById('results').classList.remove('show');
+    return;
+  }
+
   // Gauge
   gaugeChart.setOption({
     series:[{type:'gauge',startAngle:210,endAngle:-30,min:0,max:100,splitNumber:10,
