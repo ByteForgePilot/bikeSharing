@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, File, UploadFile, Request
 from fastapi.responses import HTMLResponse
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, Undefined
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.core.security import get_current_user
@@ -13,7 +13,7 @@ from app.schemas import (
 from app.services import detection as detection_service
 router = APIRouter()
 # Jinja2 templates (for dashboard)
-env = Environment(loader=FileSystemLoader("app/templates"), auto_reload=False)
+env = Environment(loader=FileSystemLoader("app/templates"), auto_reload=False, undefined=Undefined)
 # ---------------------------------------------------------------------------
 # Individual detection endpoints (real-time, per-sensor)
 # ---------------------------------------------------------------------------
@@ -92,25 +92,45 @@ async def upload_detection_files(
 # ---------------------------------------------------------------------------
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    """Standalone dashboard: loads detection_result.json and renders."""
+    """Standalone dashboard: run detection on real data and render."""
     import json
     from pathlib import Path
     from types import SimpleNamespace
-
+    from app.services.detection_engine import (
+        parse_sensor_csv, parse_pcm, parse_audio_ts, run_full_detection,
+    )
     data_dir = Path(__file__).resolve().parents[3] / "data"
-    result_path = data_dir / "detection_result.json"
-    if result_path.exists():
-        result = json.loads(result_path.read_text("utf-8"))
+    sensor_files = list(data_dir.glob("*传感器*数据*")) + list(data_dir.glob("*.txt"))
+    pcm_files = list(data_dir.glob("*.pcm"))
+    ts_files = list(data_dir.glob("*时间戳*")) + list(data_dir.glob("*timestamp*"))
+    if sensor_files and pcm_files and ts_files:
+        sensor_text = sensor_files[0].read_text("utf-8")
+        pcm_bytes = pcm_files[0].read_bytes()
+        ts_text = ts_files[0].read_text("utf-8")
+        accel, gyro = parse_sensor_csv(sensor_text)
+        audio = parse_pcm(pcm_bytes)
+        audio_ts = parse_audio_ts(ts_text)
+        result = run_full_detection(accel, gyro, audio, audio_ts)
     else:
-        result = {"health":{"total_score":0,"level":"unknown","recommendation":"No data"}}
-
+        result = {"health":{"total_score":0,"level":"unknown","recommendation":"No data files found"}}
+    # Map to template format: health + f1_charts/f2_charts/f3_charts
+    tmpl_data = {
+        "health": result["health"],
+        "sub_scores": result["health"].get("sub_scores", {}),
+        "f1_result": result.get("f1", {}),
+        "f2_result": result.get("f2", {}),
+        "f3_result": result.get("f3", {}),
+        "data_summary": result.get("data_summary", {}),
+        "f1_charts": {},
+        "f2_charts": {},
+        "f3_charts": {},
+    }
     def to_ns(d):
         if isinstance(d, dict):
             return SimpleNamespace(**{k: to_ns(v) for k, v in d.items()})
         return d
-
     template = env.get_template("index.html")
-    return HTMLResponse(template.render(request=request, result=to_ns(result)))
+    return HTMLResponse(template.render(request=request, result=to_ns(tmpl_data), raw=tmpl_data))
 # API-compatible process endpoint (mirrors algorithm-branch Flask API)
 @router.post("/process")
 async def api_process(

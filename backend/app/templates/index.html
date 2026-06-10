@@ -480,6 +480,34 @@ window.addEventListener('resize', ()=>{
 
 // Init charts on first load
 document.addEventListener('DOMContentLoaded', initCharts);
+
+// === Pre-loaded detection data (server-side) ===
+window.__BIKE_RESULT__ = {
+  health: {
+    total_score: {{ result.health.total_score }},
+    level: "{{ result.health.level }}",
+    recommendation: "{{ result.health.recommendation }}",
+    harmonic_mean: {{ result.health.harmonic_mean }},
+    penalty_factor: {{ result.health.penalty_factor }},
+    sub_scores: {
+      tire_wobble: {{ result.health.sub_scores.tire_wobble }},
+      chain_noise: {{ result.health.sub_scores.chain_noise }},
+      handlebar_misalignment: {{ result.health.sub_scores.handlebar_misalignment }}
+    }
+  },
+  f1_charts: {},
+  f2_charts: {},
+  f3_charts: {}
+};
+
+window.addEventListener('DOMContentLoaded', function() {
+  try {
+    initCharts();
+    renderResults(window.__BIKE_RESULT__);
+    document.getElementById('results').classList.add('show');
+  } catch(e) {
+    console.error('Preload render failed:', e);
+  }
+});
 </script>
 </body>
-</html>
