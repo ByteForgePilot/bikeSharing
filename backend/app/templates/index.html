@@ -585,7 +585,10 @@ document.addEventListener('DOMContentLoaded', function preload() {
   try {
     initCharts();
     renderResults(window.__BIKE_RESULT__);
-    document.getElementById('results').classList.add('show');
+    // Only show results if there's actual detection data
+    if (window.__BIKE_RESULT__.health && window.__BIKE_RESULT__.health.level !== 'nodata') {
+      document.getElementById('results').classList.add('show');
+    }
     var uz = document.getElementById('uploadZone');
     // Upload zone visible
   } catch(e) {
