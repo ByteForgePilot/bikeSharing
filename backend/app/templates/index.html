@@ -100,12 +100,19 @@
   .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .chart-box { width: 100%; height: 250px; }
 
-  .tabs { display: flex; gap: 0; margin-bottom: -1px; }
-  .tab { padding: 8px 18px; font-size: 12px; background: transparent; color: var(--text-dim);
-    border: 1px solid transparent; border-radius: 8px 8px 0 0; cursor: pointer; }
-  .tab.active { background: var(--card); color: var(--text); border-color: var(--border); }
-  .detail-panel { display: none; }
-  .detail-panel.active { display: block; }
+  .dim-overview { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:14px; }
+  .dim-card { background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden; transition:transform 0.15s; }
+  .dim-card:hover { transform:translateY(-2px); }
+  .dim-header { display:flex; align-items:center; gap:8px; padding:10px 12px; background:rgba(255,255,255,0.03); font-size:12px; font-weight:600; }
+  .dim-icon { font-size:16px; }
+  .dim-name { flex:1; }
+  .dim-status { font-size:10px; padding:2px 10px; border-radius:10px; font-weight:600; white-space:nowrap; }
+  .dim-body { display:flex; align-items:center; gap:14px; padding:12px; }
+  .dim-score { font-size:30px; font-weight:700; min-width:56px; text-align:center; line-height:1; }
+  .dim-metrics { font-size:11px; color:var(--text-dim); line-height:2; }
+  .dim-metrics span { color:var(--text); font-weight:600; }
+  .detail-card { background:var(--card); border:1px solid var(--border); border-radius:10px; margin-bottom:12px; overflow:hidden; }
+  .detail-title { padding:10px 14px; font-size:12px; font-weight:600; border-bottom:1px solid var(--border); background:rgba(255,255,255,0.02); }
 
   .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 11px; color: var(--text-dim); margin-bottom: 8px; }
   .info-grid span { color: var(--text); }
@@ -203,40 +210,73 @@
 
       <!-- Content -->
       <div class="content">
-        <div class="tabs">
-          <div class="tab active" data-panel="panel-f1">F1 · 轮胎偏摆</div>
-          <div class="tab" data-panel="panel-f2">F2 · 链条异响</div>
-          <div class="tab" data-panel="panel-f3">F3 · 车头不正</div>
+        <!-- Overview cards: three dimensions at a glance -->
+        <div class="dim-overview">
+          <div class="dim-card" id="dim-f1">
+            <div class="dim-header" style="border-left:3px solid var(--blue)">
+              <span class="dim-icon">🔧</span>
+              <span class="dim-name">F1 轮胎偏摆</span>
+              <span class="dim-status" id="dim-status-1">--</span>
+            </div>
+            <div class="dim-body">
+              <div class="dim-score" id="dim-score-1">--</div>
+              <div class="dim-metrics">
+                <div>转频 <span id="f1-freq">--</span> Hz</div>
+                <div>P值 <span id="f1-pval">--</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="dim-card" id="dim-f2">
+            <div class="dim-header" style="border-left:3px solid var(--cyan)">
+              <span class="dim-icon">🔊</span>
+              <span class="dim-name">F2 链条异响</span>
+              <span class="dim-status" id="dim-status-2">--</span>
+            </div>
+            <div class="dim-body">
+              <div class="dim-score" id="dim-score-2">--</div>
+              <div class="dim-metrics">
+                <div>信噪比 <span id="f2-snr">--</span> dB</div>
+                <div>谐波比 <span id="f2-harm">--</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="dim-card" id="dim-f3">
+            <div class="dim-header" style="border-left:3px solid var(--purple)">
+              <span class="dim-icon">📐</span>
+              <span class="dim-name">F3 车头不正</span>
+              <span class="dim-status" id="dim-status-3">--</span>
+            </div>
+            <div class="dim-body">
+              <div class="dim-score" id="dim-score-3">--</div>
+              <div class="dim-metrics">
+                <div>偏差 <span id="f3-dtheta">--</span>°</div>
+                <div>直行段 <span id="f3-seg">--</span></div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="detail-panel active card" id="panel-f1">
-          <div class="info-grid">
-            <div>车轮转频<span id="f1-freq">--</span> Hz</div><div>平整占比<span id="f1-flat">--</span></div>
-            <div>P = A₁+0.5A₂<span id="f1-pval">--</span></div><div>A₁(f)/A₂(2f)<span id="f1-amps">--</span></div>
-          </div>
+        <!-- F1 detail panel -->
+        <div class="detail-card" id="panel-f1">
+          <div class="detail-title" style="color:var(--blue)">🔧 F1 · 轮胎偏摆 — Z轴振动分析</div>
           <div class="chart-row">
             <div><div class="card-title">Z轴振动波形</div><div id="f1-waveform" class="chart-box"></div></div>
             <div><div class="card-title">FFT 频谱 · 黄色=偏摆频带</div><div id="f1-fft" class="chart-box"></div></div>
           </div>
         </div>
 
-        <div class="detail-panel card" id="panel-f2">
-          <div class="info-grid">
-            <div>预测结果<span id="f2-pred">--</span></div>
-            <div>包络谱 SNR<span id="f2-snr">--</span> dB</div><div>谐波比<span id="f2-harm">--</span></div>
-            <div>相位一致性<span id="f2-phase">--</span></div>
-          </div>
+        <!-- F2 detail panel -->
+        <div class="detail-card" id="panel-f2">
+          <div class="detail-title" style="color:var(--cyan)">🔊 F2 · 链条异响 — 音频包络谱分析</div>
           <div class="chart-row">
             <div><div class="card-title">音频波形 (8kHz)</div><div id="f2-waveform" class="chart-box"></div></div>
             <div><div class="card-title">频谱 0~4kHz</div><div id="f2-fft" class="chart-box"></div></div>
           </div>
         </div>
 
-        <div class="detail-panel card" id="panel-f3">
-          <div class="info-grid">
-            <div>等效偏差 Δθ<span id="f3-dtheta">--</span>°</div><div>偏航偏置<span id="f3-bias">--</span> rad/s</div>
-            <div>直行段数<span id="f3-seg">--</span></div>
-          </div>
+        <!-- F3 detail panel -->
+        <div class="detail-card" id="panel-f3">
+          <div class="detail-title" style="color:var(--purple)">📐 F3 · 车头不正 — 陀螺仪偏航分析</div>
           <div class="chart-row">
             <div><div class="card-title">陀螺仪三轴角速度</div><div id="f3-gyro" class="chart-box"></div></div>
             <div><div class="card-title">累计偏航角</div><div id="f3-yaw" class="chart-box"></div></div>
@@ -423,26 +463,30 @@ function renderResults(data) {
   document.getElementById('v2').style.color = lvlColor(s2);
   document.getElementById('v3').style.color = lvlColor(s3);
 
+  // Dimension overview cards
+  [1,2,3].forEach(function(i){
+    var sc = document.getElementById('dim-score-'+i);
+    var st = document.getElementById('dim-status-'+i);
+    var val = [s1,s2,s3][i-1];
+    if(sc){sc.textContent = val.toFixed(0); sc.style.color = lvlColor(val);}
+    if(st){st.textContent = lvlText(val); st.style.background = lvlColor(val); st.style.color = '#000'; st.style.fontWeight='700';}
+  });
+
   // Detail info
   const d = h.details;
   if (d.F1_tire_wobble) {
     const f = d.F1_tire_wobble;
     var el; (el=document.getElementById('f1-freq')) && (el.textContent = f.wheel_freq_hz);
-    (el=document.getElementById('f1-flat')) && (el.textContent = (f.flat_fraction*100).toFixed(0)+'%');
     (el=document.getElementById('f1-pval')) && (el.textContent = f.P_value);
-    (el=document.getElementById('f1-amps')) && (el.textContent = f.amplitude_f+' / '+f.amplitude_2f);
   }
   if (d.F2_chain_noise) {
     const f = d.F2_chain_noise;
-    var el; (el=document.getElementById('f2-pred')) && (el.textContent = f.prediction);
     (el=document.getElementById('f2-snr')) && (el.textContent = f.pedal_snr_db.toFixed(1));
     (el=document.getElementById('f2-harm')) && (el.textContent = f.harmonic_ratio.toFixed(2));
-    (el=document.getElementById('f2-phase')) && (el.textContent = f.phase_consistency.toFixed(2));
   }
   if (d.F3_handlebar_misalignment) {
     const f = d.F3_handlebar_misalignment;
     var el; (el=document.getElementById('f3-dtheta')) && (el.textContent = f.delta_theta_deg.toFixed(2));
-    (el=document.getElementById('f3-bias')) && (el.textContent = f.yaw_bias_rad_s.toFixed(4));
     (el=document.getElementById('f3-seg')) && (el.textContent = f.straight_segments);
   }
 
@@ -513,8 +557,8 @@ document.querySelectorAll('.tab').forEach(tab => {
   });
 });
 
-window.addEventListener('resize', ()=>{
-  [gaugeChart,radarChart,f1Wf,f1Fft,f2Wf,f2Fft,f3Gyro,f3Yaw].forEach(c=>{if(c)c.resize();});
+ window.addEventListener('resize', ()=>{
+   [gaugeChart,radarChart,f1Wf,f1Fft,f2Wf,f2Fft,f3Gyro,f3Yaw].forEach(c=>{if(c)c.resize();});
 });
 
 // Init charts on first load

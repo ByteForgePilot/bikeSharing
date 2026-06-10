@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, UploadFile, Request
+﻿from fastapi import APIRouter, Depends, File, UploadFile, Request
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, Undefined
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,9 +67,9 @@ async def detect_handlebar_misalignment(
     "/upload/{ride_id}",
     summary="Upload BicycleDataLogger files for full detection",
     description="""Upload the three files produced by BicycleDataLogger:
-- sensor: 传感器数据.txt (CSV with accel + gyro + GPS rows)
-- audio_pcm: 音频.pcm (16-bit LE PCM)
-- audio_ts: 音频_时间戳.csv (timestamp + cumulative samples)
+- sensor: 浼犳劅鍣ㄦ暟鎹?txt (CSV with accel + gyro + GPS rows)
+- audio_pcm: 闊抽.pcm (16-bit LE PCM)
+- audio_ts: 闊抽_鏃堕棿鎴?csv (timestamp + cumulative samples)
 Runs all three detections + composite health scoring.""",
 )
 async def upload_detection_files(
@@ -100,9 +100,9 @@ async def dashboard(request: Request):
         parse_sensor_csv, parse_pcm, parse_audio_ts, run_full_detection,
     )
     data_dir = Path(__file__).resolve().parents[3] / "data"
-    sensor_files = list(data_dir.glob("*传感器*数据*")) + list(data_dir.glob("*.txt"))
+    sensor_files = list(data_dir.glob("*浼犳劅鍣?鏁版嵁*")) + list(data_dir.glob("*.txt"))
     pcm_files = list(data_dir.glob("*.pcm"))
-    ts_files = list(data_dir.glob("*时间戳*")) + list(data_dir.glob("*timestamp*"))
+    ts_files = list(data_dir.glob("*鏃堕棿鎴?")) + list(data_dir.glob("*timestamp*"))
     if sensor_files and pcm_files and ts_files:
         sensor_text = sensor_files[0].read_text("utf-8")
         pcm_bytes = pcm_files[0].read_bytes()
@@ -154,9 +154,9 @@ async def api_process(
     result = run_full_detection(accel, gyro, audio, audio_ts_list)
     return {
         "health": result["health"],
-        "f1_charts": _build_chart_data(accel, gyro, audio, audio_ts_list),
-        "f2_charts": _build_chart_data(accel, gyro, audio, audio_ts_list),
-        "f3_charts": _build_f3_charts(gyro),
+        "f1_charts": _build_f1_chart(accel),
+        "f2_charts": _build_f2_chart(audio),
+        "f3_charts": _build_f3_chart(gyro),
         "data_summary": result["data_summary"],
     }
 
@@ -168,9 +168,9 @@ async def api_process_test():
         parse_sensor_csv, parse_pcm, parse_audio_ts, run_full_detection,
     )
     data_dir = Path(__file__).resolve().parents[3] / "data"
-    sensor_file = list(data_dir.glob("*传感器*数据*"))[0]
+    sensor_file = list(data_dir.glob("*浼犳劅鍣?鏁版嵁*"))[0]
     pcm_file = list(data_dir.glob("*.pcm"))[0]
-    ts_file = list(data_dir.glob("*时间戳*"))[0]
+    ts_file = list(data_dir.glob("*鏃堕棿鎴?"))[0]
     sensor_text = sensor_file.read_text("utf-8")
     pcm_bytes = pcm_file.read_bytes()
     ts_text = ts_file.read_text("utf-8")
@@ -180,9 +180,9 @@ async def api_process_test():
     result = run_full_detection(accel, gyro, audio, audio_ts_list)
     return {
         "health": result["health"],
-        "f1_charts": _build_chart_data(accel, gyro, audio, audio_ts_list),
-        "f2_charts": _build_chart_data(accel, gyro, audio, audio_ts_list),
-        "f3_charts": _build_f3_charts(gyro),
+        "f1_charts": _build_f1_chart(accel),
+        "f2_charts": _build_f2_chart(audio),
+        "f3_charts": _build_f3_chart(gyro),
         "data_summary": result["data_summary"],
     }
 # ---------------------------------------------------------------------------
@@ -230,9 +230,9 @@ async def api_process_json(body: dict):
     result = run_full_detection(accel, gyro, audio, audio_ts_list)
     return {
         "health": result["health"],
-        "f1_charts": _build_chart_data(accel, gyro, audio, audio_ts_list),
-        "f2_charts": _build_chart_data(accel, gyro, audio, audio_ts_list),
-        "f3_charts": _build_f3_charts(gyro),
+        "f1_charts": _build_f1_chart(accel),
+        "f2_charts": _build_f2_chart(audio),
+        "f3_charts": _build_f3_chart(gyro),
         "data_summary": result["data_summary"],
     }
 
@@ -257,18 +257,18 @@ async def diag_upload_page():
 <head><meta charset="utf-8"><title>Upload Test</title>
 <style>body{background:#111;color:#d4e4f0;font-family:sans-serif;padding:20px}button{padding:10px 24px;font-size:14px;cursor:pointer;background:#448aff;color:#fff;border:none;border-radius:8px}pre{background:#1a2736;padding:12px;border-radius:8px;margin-top:12px;white-space:pre-wrap}</style></head>
 <body>
-<h2>诊断 - 文件上传测试</h2>
-<p>选择三个文件后点"测试上传"</p>
+<h2>璇婃柇 - 鏂囦欢涓婁紶娴嬭瘯</h2>
+<p>閫夋嫨涓変釜鏂囦欢鍚庣偣"娴嬭瘯涓婁紶"</p>
 <input type="file" id="f1" accept=".txt,.csv"><br><br>
 <input type="file" id="f2" accept=".pcm,.raw,.bin"><br><br>
 <input type="file" id="f3" accept=".csv"><br><br>
-<button onclick="test()">测试上传 FormData</button>
-<button onclick="testJSON()" style="margin-left:8px">测试上传 JSON</button>
-<pre id="out">等待测试...</pre>
+<button onclick="test()">娴嬭瘯涓婁紶 FormData</button>
+<button onclick="testJSON()" style="margin-left:8px">娴嬭瘯涓婁紶 JSON</button>
+<pre id="out">绛夊緟娴嬭瘯...</pre>
 <script>
 async function test() {
   const out = document.getElementById('out');
-  out.textContent = '发送中...';
+  out.textContent = '鍙戦€佷腑...';
   try {
     const fd = new FormData();
     fd.append('sensor', document.getElementById('f1').files[0]);
@@ -277,28 +277,28 @@ async function test() {
     const r = await fetch('/api/detection/process', {method:'POST',body:fd});
     if (!r.ok) { out.textContent = 'HTTP ' + r.status + ': ' + await r.text().catch(()=>'') || ''; return; }
     const d = await r.json();
-    out.textContent = '成功! 评分: ' + d.health.total_score + '\n' + JSON.stringify(d, null, 2);
+    out.textContent = '鎴愬姛! 璇勫垎: ' + d.health.total_score + '\n' + JSON.stringify(d, null, 2);
   } catch(e) { out.textContent = 'ERROR: ' + e.name + ' ' + e.message + '\\n' + (e.stack || '');
   try { await fetch('/api/detection/log-upload-result', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'error',name:e.name,message:e.message,stack:(e.stack||'').slice(0,500)})}); } catch(ex) {} }
 }
 async function testJSON() {
   const out = document.getElementById('out');
   function b64(b) { let s=''; new Uint8Array(b).forEach(v=>s+=String.fromCharCode(v)); return btoa(s); }
-  out.textContent = '读取文件中...';
+  out.textContent = '璇诲彇鏂囦欢涓?..';
   try {
     const [sb,pb,tb] = await Promise.all([
       document.getElementById('f1').files[0].arrayBuffer(),
       document.getElementById('f2').files[0].arrayBuffer(),
       document.getElementById('f3').files[0].arrayBuffer()
     ]);
-    out.textContent = '发送 JSON 中...';
+    out.textContent = '鍙戦€?JSON 涓?..';
     const r = await fetch('/api/detection/process-json', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({sensor:b64(sb),pcm:b64(pb),audio_ts:b64(tb)})
     });
     if (!r.ok) { out.textContent = 'HTTP ' + r.status; return; }
     const d = await r.json();
-    out.textContent = '成功! 评分: ' + d.health.total_score;
+    out.textContent = '鎴愬姛! 璇勫垎: ' + d.health.total_score;
   } catch(e) { out.textContent = 'ERROR: ' + e.name + ' ' + e.message + '\\n' + (e.stack || '').slice(0,500); }
 }
 </script>
@@ -307,8 +307,64 @@ async function testJSON() {
     return HTMLResponse(html);
 # Chart data helpers (for /api/process)
 # ---------------------------------------------------------------------------
-def _build_chart_data(accel, gyro, audio, audio_ts) -> dict:
-    """Build minimal chart data; full charts computed on demand."""
-    return {}
-def _build_f3_charts(gyro) -> dict:
-    return {}
+def _build_f1_chart(accel: list) -> dict:
+    """Build F1 chart data from accelerometer readings."""
+    import numpy as np
+    if not accel:
+        return {}
+    t0 = accel[0].timestamp_ns
+    times = [(s.timestamp_ns - t0) / 1e9 for s in accel]
+    az = [s.az for s in accel]
+    n = len(az)
+    if n < 4:
+        return {"waveform": {"times": times, "az_filtered": az}, "fft": {"freqs": [], "magnitude": []}}
+    dt = (times[-1] - times[0]) / max(n - 1, 1)
+    fft_vals = np.fft.rfft(az)
+    fft_freqs = np.fft.rfftfreq(n, d=dt).tolist()
+    fft_mag = (np.abs(fft_vals) / n).tolist()
+    return {
+        "waveform": {"times": times, "az_filtered": az},
+        "fft": {"freqs": fft_freqs, "magnitude": fft_mag},
+    }
+
+def _build_f2_chart(audio: np.ndarray) -> dict:
+    """Build F2 chart data from audio PCM samples."""
+    import numpy as np
+    if audio is None or len(audio) == 0:
+        return {}
+    sr = 8000.0
+    max_len = min(len(audio), 10000)
+    times = [i / sr for i in range(max_len)]
+    amp = audio[:max_len].tolist()
+    window = audio[:min(len(audio), 8192)]
+    n = len(window)
+    if n < 4:
+        return {"waveform": {"times": times, "amplitude": amp}, "fft": {"freqs": [], "magnitude": []}}
+    fft_vals = np.fft.rfft(window)
+    fft_freqs = (np.fft.rfftfreq(n, d=1.0/sr) * (sr / 2)).tolist() if n > 0 else []
+    fft_mag = (np.abs(fft_vals) / n).tolist()
+    return {
+        "waveform": {"times": times, "amplitude": amp},
+        "fft": {"freqs": fft_freqs, "magnitude": fft_mag},
+    }
+
+def _build_f3_chart(gyro: list) -> dict:
+    """Build F3 chart data from gyroscope readings."""
+    import numpy as np
+    if not gyro:
+        return {}
+    t0 = gyro[0].timestamp_ns
+    times = [(s.timestamp_ns - t0) / 1e9 for s in gyro]
+    gx = [s.gx for s in gyro]
+    gy_arr = [s.gy for s in gyro]
+    gz = [s.gz for s in gyro]
+    n = len(gz)
+    if n < 2:
+        return {"gyro": {"times": times, "gx": gx, "gy": gy_arr, "gz": gz}, "yaw_angle": {"times": [], "angle_deg": []}}
+    dt = (times[-1] - times[0]) / max(n - 1, 1)
+    yaw_rad = np.cumsum(gz) * dt
+    yaw_deg = (yaw_rad - yaw_rad[0]) * 180.0 / np.pi
+    return {
+        "gyro": {"times": times, "gx": gx, "gy": gy_arr, "gz": gz},
+        "yaw_angle": {"times": times, "angle_deg": yaw_deg.tolist()},
+    }
