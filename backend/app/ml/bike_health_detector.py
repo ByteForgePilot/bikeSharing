@@ -772,10 +772,10 @@ def detect_chain_noise(
 
     # 带偏移的特征归一化
     snr_score = min(max(pedal_snr - 10.0, 0.0) / 10.0, 1.0)       # 10~20dB = 0~1
-    mod_score = min(max(mod_depth - 0.8, 0.0) / 0.4, 1.0)          # 0.8~1.2 = 0~1
-    harm_score = min(max(harmonic_ratio - 0.4, 0.0) / 0.4, 1.0)    # 0.4~0.8 = 0~1
-    phase_score = min(max(phase_cons - 0.4, 0.0) / 0.4, 1.0)       # 0.4~0.8 = 0~1
-    cep_score = min(max(cepstrum_s - 0.3, 0.0) / 0.5, 1.0)         # 0.3~0.8 = 0~1
+    mod_score = min(max(mod_depth - 1.2, 0.0) / 0.4, 1.0)          # 1.2~1.6 = 0~1
+    harm_score = min(max(harmonic_ratio - 0.5, 0.0) / 0.4, 1.0)    # 0.5~0.9 = 0~1
+    phase_score = min(max(phase_cons - 0.5, 0.0) / 0.4, 1.0)       # 0.5~0.9 = 0~1
+    cep_score = min(max(cepstrum_s - 0.6, 0.0) / 0.4, 1.0)         # 0.6~1.0 = 0~1
 
     # 加权融合
     anom = (0.35 * snr_score + 0.25 * mod_score +
