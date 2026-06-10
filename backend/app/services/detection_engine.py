@@ -126,9 +126,9 @@ def run_f2_chain_noise(
     return detect_chain_noise(audio, audio_chunks, pedal_freq_hz)
 
 
-def run_f3_handlebar(gyro_data: list[GyroSample]) -> dict:
+def run_f3_handlebar(gyro_data: list[GyroSample], accel_data: list[AccelSample] | None = None) -> dict:
     """Run F3 handlebar misalignment detection."""
-    return detect_handlebar_misalignment(gyro_data)
+    return detect_handlebar_misalignment(gyro_data, accel_data)
 
 
 def run_full_detection(
@@ -150,7 +150,7 @@ def run_full_detection(
 
     f1 = detect_tire_wobble(accel_s, gyro_s)
     f2 = detect_chain_noise(audio_s, audio_ts_s, pedal_freq_hz=f1["wheel_freq_hz"])
-    f3 = detect_handlebar_misalignment(gyro_s)
+    f3 = detect_handlebar_misalignment(gyro, accel)
     health = compute_health_score(f1, f2, f3)
 
     return {

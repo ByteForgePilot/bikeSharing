@@ -834,105 +834,163 @@ def detect_chain_noise(
 # ===================================================================
 
 
-def detect_handlebar_misalignment(gyro: list[GyroSample]) -> dict:
-    """
-    车头不正检测 (F3) — 设计文档算法适配版
-
-    原理：车头偏斜 → 骑行时为维持直行需持续施加补偿力矩
-         → 陀螺仪 Z 轴出现非零偏置（偏航偏置）。
-        通过分析"相对最直"骑行段的 gz 均值和累计偏航角来判断。
-
-    适配说明：无 GPS Course 数据时，
-        ① 取 gz 方差最小的 30% 窗口作为"准直行段"
-        ② 用 gz 均值估算稳态偏航偏置（等效 Δθ）
-        ③ 同时参考累计偏航角作为辅助判断
-    """
-    if len(gyro) < 32:
-        return {"score": 100.0, "delta_theta_deg": 0.0, "yaw_bias_rad_s": 0.0,
-                "straight_segments": 0}
-
-    t0 = gyro[0].timestamp_ns
-    times = np.array([(g.timestamp_ns - t0) * 1e-9 for g in gyro], dtype=np.float64)
-    gz = np.array([g.gz for g in gyro], dtype=np.float64)
-
-    target_fs = 50.0
-    _, gz_uniform = resample_irregular(times, gz, target_fs)
-
-    # ---- 1. 寻找"准直行段"（取 gz 方差最低的片段） ----
-    window_s = 5.0
-    window_n = int(window_s * target_fs)
-    step_n = max(window_n // 4, 1)
-
-    segments: list[tuple[float, np.ndarray]] = []  # (std, segment)
-    for start in range(0, len(gz_uniform) - window_n, step_n):
-        seg = gz_uniform[start : start + window_n]
-        segments.append((float(np.std(seg)), seg))
-
-    if not segments:
-        return {"score": 100.0, "delta_theta_deg": 0.0, "yaw_bias_rad_s": 0.0,
-                "straight_segments": 0}
-
-    segments.sort(key=lambda x: x[0])
-    top_n = max(int(len(segments) * 0.3), 1)
-    best_segments = segments[:top_n]
-
-    # 绝对质量门槛：最直段的 gz 标准差必须低于此值，否则判定"无有效直行段"
-    # 0.3 rad/s ≈ 17°/s — 超过此值说明全程在转弯，车头检测不可靠
-    MAX_STRAIGHT_STD = 0.3
-    best_std = best_segments[0][0]
-    if best_std > MAX_STRAIGHT_STD:
-        return {
-            "score": 100.0,
-            "delta_theta_deg": 0.0,
-            "yaw_bias_rad_s": 0.0,
-            "straight_segments": 0,
-            "warning": f"无有效直行段 (最佳段 gz_std={best_std:.3f} > {MAX_STRAIGHT_STD}), "
-                       f"建议在平直路段重新检测",
-        }
-
-    # ---- 2. 计算各段的 gz 均值和累计偏航角 ----
-    gz_means: list[float] = []
-    yaw_deviations: list[float] = []
-    dt = 1.0 / target_fs
-
-    for _, seg in best_segments:
-        gz_means.append(float(np.mean(seg)))
-        yaw = np.cumsum(seg) * dt
-        yaw_deviations.append(float(np.mean(yaw)))
-
-    # ---- 3. 综合指标 ----
-    yaw_bias = float(np.mean(gz_means))  # 稳态偏航偏置 (rad/s)
-    avg_yaw_deviation = float(np.mean([abs(d) for d in yaw_deviations]))  # 累计偏航角 (rad)
-
-    # 将 gz 偏置映射为等效车头偏角 Δθ（°）
-    # 关系：Δθ ≈ |gz_bias| × T_observation
-    # 其中 T_observation = 2s（骑行者感知漂移的时间尺度）
-    T_obs = 2.0
-    delta_theta_from_bias = float(np.degrees(abs(yaw_bias) * T_obs))
-
-    # 辅助：累计偏航角也反映偏斜程度
-    delta_theta_from_yaw = float(np.degrees(avg_yaw_deviation))
-
-    # 取两者加权作为最终 Δθ
-    delta_theta_deg = 0.7 * delta_theta_from_bias + 0.3 * delta_theta_from_yaw
-
-    # ---- 4. 线性插值评分 ----
-    theta_ok = 8.0
-    theta_bad = 22.0
-
-    if delta_theta_deg <= theta_ok:
-        score = 100.0
-    elif delta_theta_deg >= theta_bad:
-        score = 0.0
-    else:
-        score = 100.0 * (1.0 - (delta_theta_deg - theta_ok) / (theta_bad - theta_ok))
-
-    return {
-        "score": round(float(score), 2),
-        "delta_theta_deg": round(delta_theta_deg, 2),
-        "yaw_bias_rad_s": round(yaw_bias, 4),
-        "straight_segments": top_n,
-    }
+def detect_handlebar_misalignment(
+     gyro: list[GyroSample],
+     accel: list[AccelSample] | None = None,
+ ) -> dict:
+     """
+     车头不正检测 (F3 v3.2) — 陀螺仪偏航偏置 + 加速度计侧向稳定性
+ 
+     原理：
+       ① 陀螺仪 Z 轴偏置 → 直行段 gz 中位偏置 × 观察时长 → 等效偏角 Δθ₁
+       ② 加速度计 X 轴晃动 → 直行段 ax 标准差 → ax_wobble 惩罚因子
+ 
+     改进 v3.2:
+       - 新增加速度计辅助检测：骑行者身体补偿导致的侧向晃动
+       - 当陀螺仪偏置小 (Δθ₁ < 3°) 但侧向晃动大 (ax_std > 0.8 m/s²) 时，
+         施加 wobble 惩罚放大等效角度
+     """
+     has_accel = accel is not None and len(accel) >= 32
+ 
+     # ------------------------------------------------------------------
+     # 一、陀螺仪 Z 轴偏置检测
+     # ------------------------------------------------------------------
+     if len(gyro) < 32:
+         _base = {"score": 100.0, "delta_theta_deg": 0.0, "yaw_bias_rad_s": 0.0,
+                  "straight_segments": 0}
+         if has_accel:
+             _base["ax_wobble"] = 0.0
+         return _base
+ 
+     t0 = gyro[0].timestamp_ns
+     times = np.array([(g.timestamp_ns - t0) * 1e-9 for g in gyro], dtype=np.float64)
+     gz = np.array([g.gz for g in gyro], dtype=np.float64)
+ 
+     target_fs = 50.0
+     _, gz_uniform = resample_irregular(times, gz, target_fs)
+ 
+     # 重采样三轴加速度到相同时间基（用于去重力侧向晃动检测）
+     acc_dev_uniform: np.ndarray | None = None
+     if has_accel:
+         a_t0 = accel[0].timestamp_ns
+         a_times = np.array([(a.timestamp_ns - a_t0) * 1e-9 for a in accel], dtype=np.float64)
+         ax_a = np.array([a.ax for a in accel], dtype=np.float64)
+         ay_a = np.array([a.ay for a in accel], dtype=np.float64)
+         az_a = np.array([a.az for a in accel], dtype=np.float64)
+ 
+         # 去除重力直流偏置 = 全程均值（≈ 重力向量在手机各轴的分量）
+         grav_x = float(np.mean(ax_a))
+         grav_y = float(np.mean(ay_a))
+         grav_z = float(np.mean(az_a))
+         ax_d = ax_a - grav_x
+         ay_d = ay_a - grav_y
+         az_d = az_a - grav_z
+ 
+         # 三轴去重力残差幅度：方向无关的晃动度量
+         dev = np.sqrt(ax_d**2 + ay_d**2 + az_d**2)
+         _, acc_dev_uniform = resample_irregular(a_times, dev, target_fs)
+         # 对齐长度
+         min_n = min(len(acc_dev_uniform), len(gz_uniform))
+         acc_dev_uniform = acc_dev_uniform[:min_n]
+         gz_uniform = gz_uniform[:min_n]
+ 
+     # ---- 1. 寻找直行段 (5s 窗口, gz 方差最低的 30%) ----
+     window_s = 5.0
+     window_n = int(window_s * target_fs)
+     step_n = max(window_n // 4, 1)
+ 
+     # segments: (gz_std, start_idx)
+     segments: list[tuple[float, int]] = []
+     for start in range(0, len(gz_uniform) - window_n, step_n):
+         seg = gz_uniform[start : start + window_n]
+         segments.append((float(np.std(seg)), start))
+ 
+     if not segments:
+         _base = {"score": 100.0, "delta_theta_deg": 0.0, "yaw_bias_rad_s": 0.0,
+                  "straight_segments": 0}
+         if has_accel:
+             _base["ax_wobble"] = 0.0
+         return _base
+ 
+     segments.sort(key=lambda x: x[0])
+     top_n = max(int(len(segments) * 0.3), 1)
+     best_segments = segments[:top_n]
+     straight_segments = top_n
+ 
+     # ---- 2. 计算直行段偏置和侧向晃动 ----
+     gz_means: list[float] = []
+     dev_stds: list[float] = []
+ 
+     for _, start_idx in best_segments:
+         seg_gz = gz_uniform[start_idx : start_idx + window_n]
+         gz_means.append(float(np.mean(seg_gz)))
+         if acc_dev_uniform is not None:
+             seg_dev = acc_dev_uniform[start_idx : start_idx + window_n]
+             dev_stds.append(float(np.std(seg_dev)))
+ 
+     # 陀螺仪偏置：中位 gz (rad/s)
+     yaw_bias = float(np.median(gz_means))
+ 
+     # 等效偏角 Δθ₁
+     total_obs_time = len(best_segments) * window_s
+     delta_theta_deg = float(np.degrees(abs(yaw_bias) * min(total_obs_time, 30.0)))
+ 
+     # 符号一致性增强（仅当明显偏置且同向时）
+     signs = [np.sign(m) for m in gz_means if abs(m) > 1e-6]
+     if signs:
+         sign_consistency = abs(sum(signs)) / len(signs)
+         if sign_consistency > 0.7 and abs(yaw_bias) > 0.001:
+             boost = 1.0 + (sign_consistency - 0.7) * 0.3
+             delta_theta_deg *= boost
+             delta_theta_deg = min(delta_theta_deg, 45.0)
+ 
+     # ---- 3. 加速度计去重力残差晃动惩罚 ----
+     # 原理：车头不正 → 骑行者身体补偿摇晃 → 三轴加速度均有可测的额外波动
+     #       方向无关：去重力直流后算残差幅度 std，不依赖手机安装方向
+     wobble_factor = 0.0
+     if has_accel and dev_stds:
+         median_dev_std = float(np.median(dev_stds))
+         all_dev_std = float(np.std(acc_dev_uniform))
+ 
+         # 稳定性比值 = 直行段残差幅度 std / 全程残差幅度 std
+         #   健康车：直行段稳定 → 比值低（基线 ~0.53）
+         #   车头不正：直行段也晃 → 比值接近 1（data/3 ~0.96）
+         stability_ratio = median_dev_std / (all_dev_std + 1e-10)
+ 
+         RATIO_OK = 0.55       # 比值低于此不惩罚
+         RATIO_SEVERE = 0.80   # 比值高于此全额惩罚（3x）
+         GYRO_SILENT_GATE = 3.0
+ 
+         if delta_theta_deg < GYRO_SILENT_GATE and stability_ratio > RATIO_OK:
+             wn = min((stability_ratio - RATIO_OK) / (RATIO_SEVERE - RATIO_OK), 1.0)
+             wobble_factor = wn * 2.0
+             delta_theta_deg *= (1.0 + wobble_factor)
+ 
+         median_ax_std = float(np.median(dev_stds))
+     else:
+         stability_ratio = 0.0
+         median_ax_std = 0.0
+ 
+     # ---- 4. 评分 ----
+     theta_ok = 3.0    # ≤3° → 正常
+     theta_bad = 12.0  # ≥12° → 严重偏斜
+ 
+     if delta_theta_deg <= theta_ok:
+         score = 100.0
+     elif delta_theta_deg >= theta_bad:
+         score = 0.0
+     else:
+         score = 100.0 * (1.0 - (delta_theta_deg - theta_ok) / (theta_bad - theta_ok))
+ 
+     result = {
+         "score": round(float(score), 2),
+         "delta_theta_deg": round(delta_theta_deg, 2),
+         "yaw_bias_rad_s": round(yaw_bias, 4),
+         "straight_segments": straight_segments,
+     }
+     if has_accel:
+         result["ax_wobble"] = round(float(median_ax_std), 4)
+     return result
 
 
 # ===================================================================
