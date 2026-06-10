@@ -327,7 +327,7 @@ def _build_f1_chart(accel: list) -> dict:
         "fft": {"freqs": fft_freqs, "magnitude": fft_mag},
     }
 
-def _build_f2_chart(audio: np.ndarray) -> dict:
+def _build_f2_chart(audio) -> dict:
     """Build F2 chart data from audio PCM samples."""
     import numpy as np
     if audio is None or len(audio) == 0:
