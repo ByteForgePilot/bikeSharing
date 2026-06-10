@@ -92,8 +92,25 @@ async def upload_detection_files(
 # ---------------------------------------------------------------------------
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
+    """Standalone dashboard: loads detection_result.json and renders."""
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    data_dir = Path(__file__).resolve().parents[3] / "data"
+    result_path = data_dir / "detection_result.json"
+    if result_path.exists():
+        result = json.loads(result_path.read_text("utf-8"))
+    else:
+        result = {"health":{"total_score":0,"level":"unknown","recommendation":"No data"}}
+
+    def to_ns(d):
+        if isinstance(d, dict):
+            return SimpleNamespace(**{k: to_ns(v) for k, v in d.items()})
+        return d
+
     template = env.get_template("index.html")
-    return HTMLResponse(template.render(request=request))
+    return HTMLResponse(template.render(request=request, result=to_ns(result)))
 # API-compatible process endpoint (mirrors algorithm-branch Flask API)
 @router.post("/process")
 async def api_process(
