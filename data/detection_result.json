@@ -1,13 +1,13 @@
 {
   "health": {
-    "total_score": 27.41,
-    "harmonic_mean": 52.76,
-    "penalty_factor": 0.5195,
+    "total_score": 13.86,
+    "harmonic_mean": 35.84,
+    "penalty_factor": 0.3867,
     "level": "bad",
     "recommendation": "建议换车",
     "sub_scores": {
       "tire_wobble": 82.69,
-      "chain_noise": 26.99,
+      "chain_noise": 14.95,
       "handlebar_misalignment": 100.0
     },
     "details": {
@@ -20,15 +20,12 @@
         "flat_fraction": 0.393
       },
       "F2_chain_noise": {
-        "score": 26.99,
+        "score": 14.95,
         "prediction": "异响",
-        "confidence": 0.7301,
         "pedal_snr_db": 6.68,
         "harmonic_ratio": 0.667,
         "phase_consistency": 0.711,
-        "cepstrum_score": 1.0,
-        "hf_energy_ratio": 0.0001,
-        "anomaly_score": 0.5151
+        "anomaly_score": 0.8505
       },
       "F3_handlebar_misalignment": {
         "score": 100.0,
@@ -47,15 +44,12 @@
     "flat_fraction": 0.393
   },
   "f2": {
-    "score": 26.99,
+    "score": 14.95,
     "prediction": "异响",
-    "confidence": 0.7301,
     "pedal_snr_db": 6.68,
     "harmonic_ratio": 0.667,
     "phase_consistency": 0.711,
-    "cepstrum_score": 1.0,
-    "hf_energy_ratio": 0.0001,
-    "anomaly_score": 0.5151
+    "anomaly_score": 0.8505
   },
   "f3": {
     "score": 100.0,

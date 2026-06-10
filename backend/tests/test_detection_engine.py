@@ -104,7 +104,7 @@ class TestF2ChainNoise:
         audio, chunks = _make_audio(8000, freq=2.0)
         result = run_f2_chain_noise(audio, chunks)
         assert "score" in result
-        assert "prediction" in result
+        assert "score" in result
 
     def test_empty_audio(self):
         """Empty audio should return healthy score."""

@@ -89,7 +89,7 @@ def main():
     print()
 
     print(f"  F2 链条异响:")
-    print(f"      预测: {f2['prediction']} (置信度: {f2['confidence']:.3f})")
+    print(f"      预测: {f2['prediction']} ")
     print(f"      包络谱 SNR: {f2['pedal_snr_db']:.1f} dB")
     print(f"      谐波比: {f2['harmonic_ratio']:.3f}")
     print(f"      相位一致性: {f2['phase_consistency']:.3f}")

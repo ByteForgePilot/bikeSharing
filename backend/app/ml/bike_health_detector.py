@@ -640,7 +640,7 @@ def detect_chain_noise(
       pedal_freq_hz: 踏频 (Hz)，None 时自动从包络谱估算
     """
     if len(audio) == 0:
-        return {"score": 100.0, "prediction": "正常", "confidence": 1.0,
+        return {"score": 100.0, "prediction": "良好",
                 "pedal_snr_db": 0.0, "harmonic_ratio": 0.0, "phase_consistency": 0.0}
 
     # ---- 1. 采样率估计 → 重采样到 8kHz ----
@@ -661,7 +661,7 @@ def detect_chain_noise(
         audio_8k = audio.astype(np.float64)
     # 防御：确保至少有 2 个样本
     if len(audio_8k) < 2:
-        return {"score": 100.0, "prediction": "正常", "confidence": 1.0,
+        return {"score": 100.0, "prediction": "良好",
                 "pedal_snr_db": 0.0, "harmonic_ratio": 0.0, "phase_consistency": 0.0}
 
     # ---- 2. 踏频估计（未提供时自相关法估算） ----
@@ -736,59 +736,36 @@ def detect_chain_noise(
     #   crest_factor:  峰值因子
     # ================================================================
 
-    # 包络谱 + cepstrum 得分（核心，权重 0.60）
+    # 异常得分：仅三个核心特征
     snr_score = min(pedal_snr / 10.0, 1.0)                         # 高SNR→1(异常), 低SNR→0
     harm_score = min(harmonic_ratio / 0.7, 1.0)                    # 高谐波→1(异常), 低谐波→0
     phase_score = min(phase_cons / 0.7, 1.0)                       # 高一致→1(异常), 低一致→0
-    envelope_score = 0.35 * snr_score + 0.25 * harm_score + 0.20 * phase_score + 0.20 * cepstrum_s
-
-    # 辅助得分（权重 0.40）
-    hf_score = min(hf_ratio / 0.15, 1.0)
-    crest_score = min((crest_factor - 10) / 40, 1.0)
-    auxiliary_score = 0.55 * hf_score + 0.45 * crest_score
-
-    # 综合异常得分
-    anomaly_score = 0.60 * envelope_score + 0.40 * auxiliary_score
+    anomaly_score = 0.40 * snr_score + 0.35 * harm_score + 0.25 * phase_score
     anomaly_score = min(max(anomaly_score, 0.0), 1.0)
 
     # ================================================================
-    # 12. 决策与评分
+    # 12. 连续评分 + 三级分级
+    #     score 0-100, 越高链条状况越好
+    #     "良好" >= 70: 链条正常或极轻微噪音
+    #     "轻微" 40-70: 有一定链条噪音, 可继续使用但需注意
+    #     "异响" < 40:  明显链条异响, 建议检修
     # ================================================================
 
-    if anomaly_score < 0.25:
-        prediction = "正常"
-        confidence = 0.8 + (0.25 - anomaly_score) * 0.8
-    elif anomaly_score > 0.55:
-        prediction = "异响"
-        confidence = 0.8 + (anomaly_score - 0.55) * 0.5
-    else:
-        if anomaly_score < 0.40:
-            prediction = "正常"
-            confidence = 0.5 + (0.40 - anomaly_score) * 2.0
-        else:
-            prediction = "异响"
-            confidence = 0.5 + (anomaly_score - 0.40) * 2.0
-    confidence = min(max(confidence, 0.5), 1.0)
+    score = max(0.0, min(100.0, 100.0 * (1.0 - anomaly_score)))
 
-    # 设计文档线性插值评分
-    if prediction == "正常" and confidence >= 0.8:
-        score = 100.0
-    elif prediction == "异响" and confidence >= 0.8:
-        score = 0.0
-    elif prediction == "正常":
-        score = 50.0 + (confidence - 0.5) / 0.3 * 30.0
+    if score >= 70:
+        level = "良好"
+    elif score >= 40:
+        level = "轻微"
     else:
-        score = 100.0 * (1.0 - confidence)
+        level = "异响"
 
     return {
         "score": round(float(score), 2),
-        "prediction": prediction,
-        "confidence": round(float(confidence), 4),
+        "prediction": level,
         "pedal_snr_db": round(float(pedal_snr), 2),
         "harmonic_ratio": round(float(harmonic_ratio), 3),
         "phase_consistency": round(float(phase_cons), 3),
-        "cepstrum_score": round(float(cepstrum_s), 3),
-        "hf_energy_ratio": round(float(hf_ratio), 4),
         "anomaly_score": round(float(anomaly_score), 4),
     }
 
