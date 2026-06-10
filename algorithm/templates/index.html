@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>共享单车健康快速检测系统</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1923; --card: #1a2736; --border: #2a3a4a; --text: #c8d6e5;
+    --text-dim: #6b7d8e; --green: #00e676; --yellow: #ffab00; --red: #ff1744;
+    --blue: #448aff; --purple: #7c4dff; --cyan: #18ffff;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; min-height:100vh; }
+
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; background: linear-gradient(135deg, #1a2736, #0d1b2a);
+    border-bottom: 1px solid var(--border);
+  }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header .sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px 24px; }
+
+  /* ---- upload zone ---- */
+  .upload-zone {
+    background: var(--card); border: 2px dashed var(--border); border-radius: 12px;
+    padding: 28px 24px; text-align: center; transition: border-color 0.3s;
+  }
+  .upload-zone.dragover { border-color: var(--blue); background: rgba(68,138,255,0.05); }
+  .upload-zone h3 { font-size: 16px; margin-bottom: 6px; }
+  .upload-zone .hint { font-size: 12px; color: var(--text-dim); margin-bottom: 18px; }
+
+  .file-inputs { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .file-box {
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 18px; width: 240px; cursor: pointer; transition: all 0.2s;
+    text-align: center;
+  }
+  .file-box:hover { border-color: var(--blue); }
+  .file-box.filled { border-color: var(--green); background: rgba(0,230,118,0.05); }
+  .file-box .icon { font-size: 24px; margin-bottom: 6px; }
+  .file-box .name { font-size: 12px; font-weight: 600; }
+  .file-box .desc { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+  .file-box .status { font-size: 10px; color: var(--green); margin-top: 4px; display: none; }
+  .file-box.filled .status { display: block; }
+  .file-box input { display: none; }
+
+  .btn-detect {
+    margin-top: 20px; padding: 10px 48px; font-size: 15px; font-weight: 600;
+    background: var(--blue); color: #fff; border: none; border-radius: 8px;
+    cursor: pointer; transition: all 0.2s; letter-spacing: 2px;
+  }
+  .btn-detect:hover { background: #5a9cff; }
+  .btn-detect:disabled { background: #3a506b; cursor: not-allowed; }
+
+  /* ---- loading ---- */
+  .loading {
+    display: none; text-align: center; padding: 40px;
+  }
+  .loading.show { display: block; }
+  .spinner {
+    width: 40px; height: 40px; border: 4px solid var(--border);
+    border-top-color: var(--blue); border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin: 0 auto 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- results ---- */
+  .results { display: none; margin-top: 20px; }
+  .results.show { display: block; }
+
+  .main { display: grid; grid-template-columns: 300px 1fr; gap: 14px; }
+  .sidebar { display: flex; flex-direction: column; gap: 14px; }
+  .content { display: flex; flex-direction: column; gap: 14px; }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .card-title { font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px; }
+  .card-title .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+  #gauge-chart { width: 100%; height: 220px; }
+
+  .score-badge { text-align: center; padding: 8px; border-radius: 8px; }
+  .score-value { font-size: 42px; font-weight: 700; line-height: 1; }
+  .score-label { font-size: 13px; margin-top: 4px; }
+  .score-good .score-value { color: var(--green); }
+  .score-caution .score-value { color: var(--yellow); }
+  .score-bad .score-value { color: var(--red); }
+
+  .sub-scores { display: flex; gap: 8px; }
+  .sub-card { flex: 1; padding: 10px; border-radius: 8px; text-align: center;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border); }
+  .sub-card .val { font-size: 24px; font-weight: 700; }
+  .sub-card .lbl { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .chart-box { width: 100%; height: 250px; }
+
+  .tabs { display: flex; gap: 0; margin-bottom: -1px; }
+  .tab { padding: 8px 18px; font-size: 12px; background: transparent; color: var(--text-dim);
+    border: 1px solid transparent; border-radius: 8px 8px 0 0; cursor: pointer; }
+  .tab.active { background: var(--card); color: var(--text); border-color: var(--border); }
+  .detail-panel { display: none; }
+  .detail-panel.active { display: block; }
+
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 11px; color: var(--text-dim); margin-bottom: 8px; }
+  .info-grid span { color: var(--text); }
+
+  @media (max-width: 900px) {
+    .main { grid-template-columns: 1fr; }
+    .chart-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>共享单车健康快速检测系统 v2.0</h1>
+    <div class="sub">Bike Health Rapid Inspection · 上传文件 · 在线检测</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- ============ UPLOAD ZONE ============ -->
+  <div class="upload-zone" id="uploadZone">
+    <h3>上传检测数据</h3>
+    <p class="hint">请选择传感器数据、音频文件和音频时间戳三个文件</p>
+    <div class="file-inputs">
+      <label class="file-box" id="boxSensor">
+        <div class="icon">📊</div>
+        <div class="name">传感器数据.txt</div>
+        <div class="desc">IMU 加速度计 + 陀螺仪</div>
+        <div class="status">已选择</div>
+        <input type="file" id="fileSensor" accept=".txt,.csv">
+      </label>
+      <label class="file-box" id="boxPcm">
+        <div class="icon">🎵</div>
+        <div class="name">音频.pcm</div>
+        <div class="desc">16-bit 单声道 PCM</div>
+        <div class="status">已选择</div>
+        <input type="file" id="filePcm" accept=".pcm,.raw,.bin">
+      </label>
+      <label class="file-box" id="boxTs">
+        <div class="icon">⏱️</div>
+        <div class="name">音频_时间戳.csv</div>
+        <div class="desc">采样时间戳映射表</div>
+        <div class="status">已选择</div>
+        <input type="file" id="fileTs" accept=".csv">
+      </label>
+    </div>
+    <button class="btn-detect" id="btnDetect" disabled>开始检测</button>
+  </div>
+
+  <!-- ============ LOADING ============ -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p>正在分析传感器数据与音频特征...</p>
+    <p style="font-size:11px;color:var(--text-dim);margin-top:4px;">FFT 频谱分析 · MFCC 特征提取 · SVM 推理</p>
+  </div>
+
+  <!-- ============ ERROR ============ -->
+  <div id="errorMsg" style="display:none; background:rgba(255,23,68,0.1); border:1px solid var(--red); border-radius:8px; padding:16px; margin-top:16px; color:var(--red); font-size:13px;"></div>
+
+  <!-- ============ RESULTS ============ -->
+  <div class="results" id="results">
+    <div class="main">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="card">
+          <div class="card-title"><span class="dot" style="background:var(--cyan)"></span>综合健康评分</div>
+          <div id="gauge-chart"></div>
+          <div id="score-badge" class="score-badge">
+            <div class="score-value">--</div>
+            <div class="score-label">--</div>
+          </div>
+          <div class="info-grid" style="margin-top:8px;">
+            <div>调和平均 H<span id="info-h">--</span></div>
+            <div>惩罚因子<span id="info-p">--</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="dot" style="background:var(--purple)"></span>三维评估雷达图</div>
+          <div id="radar-chart" style="width:100%;height:200px;"></div>
+        </div>
+        <div class="sub-scores">
+          <div class="sub-card"><div class="val" style="color:var(--blue)" id="v1">--</div><div class="lbl">F1 轮胎偏摆</div></div>
+          <div class="sub-card"><div class="val" style="color:var(--cyan)" id="v2">--</div><div class="lbl">F2 链条异响</div></div>
+          <div class="sub-card"><div class="val" style="color:var(--purple)" id="v3">--</div><div class="lbl">F3 车头不正</div></div>
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div class="content">
+        <div class="tabs">
+          <div class="tab active" data-panel="panel-f1">F1 · 轮胎偏摆</div>
+          <div class="tab" data-panel="panel-f2">F2 · 链条异响</div>
+          <div class="tab" data-panel="panel-f3">F3 · 车头不正</div>
+        </div>
+
+        <div class="detail-panel active card" id="panel-f1">
+          <div class="info-grid">
+            <div>车轮转频<span id="f1-freq">--</span> Hz</div><div>平整占比<span id="f1-flat">--</span></div>
+            <div>P = A₁+0.5A₂<span id="f1-pval">--</span></div><div>A₁(f)/A₂(2f)<span id="f1-amps">--</span></div>
+          </div>
+          <div class="chart-row">
+            <div><div class="card-title">Z轴振动波形</div><div id="f1-waveform" class="chart-box"></div></div>
+            <div><div class="card-title">FFT 频谱 · 黄色=偏摆频带</div><div id="f1-fft" class="chart-box"></div></div>
+          </div>
+        </div>
+
+        <div class="detail-panel card" id="panel-f2">
+          <div class="info-grid">
+            <div>预测<span id="f2-pred">--</span></div><div>置信度<span id="f2-conf">--</span></div>
+            <div>包络谱 SNR<span id="f2-snr">--</span> dB</div><div>谐波比<span id="f2-harm">--</span></div>
+            <div>相位一致性<span id="f2-phase">--</span></div><div>高频能量比<span id="f2-hf">--</span></div>
+          </div>
+          <div class="chart-row">
+            <div><div class="card-title">音频波形 (8kHz)</div><div id="f2-waveform" class="chart-box"></div></div>
+            <div><div class="card-title">频谱 0~4kHz</div><div id="f2-fft" class="chart-box"></div></div>
+          </div>
+        </div>
+
+        <div class="detail-panel card" id="panel-f3">
+          <div class="info-grid">
+            <div>等效偏差 Δθ<span id="f3-dtheta">--</span>°</div><div>偏航偏置<span id="f3-bias">--</span> rad/s</div>
+            <div>直行段数<span id="f3-seg">--</span></div>
+          </div>
+          <div class="chart-row">
+            <div><div class="card-title">陀螺仪三轴角速度</div><div id="f3-gyro" class="chart-box"></div></div>
+            <div><div class="card-title">累计偏航角</div><div id="f3-yaw" class="chart-box"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== FILE UPLOAD LOGIC ====================
+const fileState = { sensor: null, pcm: null, ts: null };
+
+function updateUploadUI() {
+  ['sensor','pcm','ts'].forEach(k => {
+    const box = document.getElementById(k==='sensor'?'boxSensor':k==='pcm'?'boxPcm':'boxTs');
+    if (fileState[k]) box.classList.add('filled'); else box.classList.remove('filled');
+  });
+  const all = fileState.sensor && fileState.pcm && fileState.ts;
+  document.getElementById('btnDetect').disabled = !all;
+}
+
+document.getElementById('fileSensor').addEventListener('change', function(e) {
+  fileState.sensor = e.target.files[0]; updateUploadUI();
+});
+document.getElementById('filePcm').addEventListener('change', function(e) {
+  fileState.pcm = e.target.files[0]; updateUploadUI();
+});
+document.getElementById('fileTs').addEventListener('change', function(e) {
+  fileState.ts = e.target.files[0]; updateUploadUI();
+});
+
+// Drag & drop
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+zone.addEventListener('drop', function(e) {
+  e.preventDefault(); zone.classList.remove('dragover');
+  const files = e.dataTransfer.files;
+  for (const f of files) {
+    const n = f.name.toLowerCase();
+    if (n.includes('传感器') || n.includes('sensor')) { fileState.sensor = f; }
+    else if (n.endsWith('.pcm') || n.endsWith('.raw')) { fileState.pcm = f; }
+    else if (n.includes('时间戳') || (n.includes('音频') && n.endsWith('.csv'))) { fileState.ts = f; }
+  }
+  updateUploadUI();
+});
+
+// ==================== DETECTION ====================
+document.getElementById('btnDetect').addEventListener('click', async function() {
+  const btn = this;
+  btn.disabled = true;
+  btn.textContent = '检测中...';
+  document.getElementById('loading').classList.add('show');
+  document.getElementById('results').classList.remove('show');
+  document.getElementById('errorMsg').style.display = 'none';
+
+  const form = new FormData();
+  form.append('sensor', fileState.sensor);
+  form.append('audio_pcm', fileState.pcm);
+  form.append('audio_ts', fileState.ts);
+
+  try {
+    const resp = await fetch('/api/process', { method: 'POST', body: form });
+    const data = await resp.json();
+    if (data.error) { showError(data.error); return; }
+    renderResults(data);
+    document.getElementById('results').classList.add('show');
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+  } catch (e) {
+    showError('请求失败: ' + e.message);
+  } finally {
+    document.getElementById('loading').classList.remove('show');
+    btn.disabled = false;
+    btn.textContent = '开始检测';
+  }
+});
+
+function showError(msg) {
+  const el = document.getElementById('errorMsg');
+  el.textContent = '✗ ' + msg;
+  el.style.display = 'block';
+}
+
+// ==================== CHARTS ====================
+let gaugeChart, radarChart, f1Wf, f1Fft, f2Wf, f2Fft, f3Gyro, f3Yaw;
+
+function initCharts() {
+  gaugeChart = echarts.init(document.getElementById('gauge-chart'));
+  radarChart = echarts.init(document.getElementById('radar-chart'));
+  f1Wf = echarts.init(document.getElementById('f1-waveform'));
+  f1Fft = echarts.init(document.getElementById('f1-fft'));
+  f2Wf = echarts.init(document.getElementById('f2-waveform'));
+  f2Fft = echarts.init(document.getElementById('f2-fft'));
+  f3Gyro = echarts.init(document.getElementById('f3-gyro'));
+  f3Yaw = echarts.init(document.getElementById('f3-yaw'));
+}
+
+function lvlColor(s) { return s>=70?'#00e676':s>=50?'#ffab00':'#ff1744'; }
+function lvlText(s) { return s>=70?'推荐骑行':s>=50?'谨慎使用':'建议换车'; }
+function lvlClass(s) { return s>=70?'score-good':s>=50?'score-caution':'score-bad'; }
+
+function chartBase() {
+  return {
+    tooltip:{trigger:'axis'},
+    grid:{left:44,right:12,top:8,bottom:28},
+    xAxis:{type:'value',name:'s',nameTextStyle:{color:'#6b7d8e',fontSize:9},
+      splitLine:{lineStyle:{color:'#2a3a4a',type:'dashed',opacity:0.5}}},
+    yAxis:{type:'value',nameTextStyle:{color:'#6b7d8e',fontSize:9},splitLine:{show:false}},
+  };
+}
+
+function renderResults(data) {
+  const h = data.health, s1 = h.sub_scores.tire_wobble, s2 = h.sub_scores.chain_noise, s3 = h.sub_scores.handlebar_misalignment;
+  const S = h.total_score;
+
+  // Gauge
+  gaugeChart.setOption({
+    series:[{type:'gauge',startAngle:210,endAngle:-30,min:0,max:100,splitNumber:10,
+      center:['50%','58%'],radius:'86%',
+      axisLine:{lineStyle:{width:14,color:[[0.5,'#ff1744'],[0.7,'#ffab00'],[1,'#00e676']]}},
+      axisTick:{show:false},splitLine:{show:false},axisLabel:{show:false},
+      pointer:{length:'68%',width:5,itemStyle:{color:lvlColor(S)}},
+      detail:{valueAnimation:true,formatter:v=>v.toFixed(1)+'分',color:'#c8d6e5',fontSize:16,offsetCenter:[0,'63%'],fontWeight:600},
+      data:[{value:S}]}]
+  });
+
+  // Badge
+  const badge = document.getElementById('score-badge');
+  badge.className = 'score-badge '+lvlClass(S);
+  badge.querySelector('.score-value').textContent = S.toFixed(1)+'分';
+  badge.querySelector('.score-label').textContent = lvlText(S);
+  document.getElementById('info-h').textContent = h.harmonic_mean.toFixed(1);
+  document.getElementById('info-p').textContent = h.penalty_factor.toFixed(4);
+
+  // Radar
+  radarChart.setOption({
+    radar:{center:['50%','54%'],radius:'68%',
+      indicator:[{name:'轮胎偏摆',max:100},{name:'链条异响',max:100},{name:'车头不正',max:100}],
+      axisName:{color:'#6b7d8e',fontSize:10},
+      splitArea:{areaStyle:{color:['rgba(68,138,255,0.02)','rgba(68,138,255,0.04)']}}},
+    series:[{type:'radar',symbol:'circle',symbolSize:4,
+      lineStyle:{color:'#448aff',width:2},areaStyle:{color:'rgba(68,138,255,0.15)'},
+      itemStyle:{color:'#448aff'},data:[{value:[s1,s2,s3]}]}]
+  });
+
+  // Sub cards
+  document.getElementById('v1').textContent = s1.toFixed(1);
+  document.getElementById('v2').textContent = s2.toFixed(1);
+  document.getElementById('v3').textContent = s3.toFixed(1);
+  document.getElementById('v1').style.color = lvlColor(s1);
+  document.getElementById('v2').style.color = lvlColor(s2);
+  document.getElementById('v3').style.color = lvlColor(s3);
+
+  // Detail info
+  const d = h.details;
+  if (d.F1_tire_wobble) {
+    const f = d.F1_tire_wobble;
+    document.getElementById('f1-freq').textContent = f.wheel_freq_hz;
+    document.getElementById('f1-flat').textContent = (f.flat_fraction*100).toFixed(0)+'%';
+    document.getElementById('f1-pval').textContent = f.P_value;
+    document.getElementById('f1-amps').textContent = f.amplitude_f+' / '+f.amplitude_2f;
+  }
+  if (d.F2_chain_noise) {
+    const f = d.F2_chain_noise;
+    document.getElementById('f2-pred').textContent = f.prediction;
+    document.getElementById('f2-conf').textContent = f.confidence.toFixed(3);
+    document.getElementById('f2-snr').textContent = f.pedal_snr_db.toFixed(1);
+    document.getElementById('f2-harm').textContent = f.harmonic_ratio.toFixed(2);
+    document.getElementById('f2-phase').textContent = f.phase_consistency.toFixed(2);
+    document.getElementById('f2-hf').textContent = (f.hf_energy_ratio*100).toFixed(1)+'%';
+  }
+  if (d.F3_handlebar_misalignment) {
+    const f = d.F3_handlebar_misalignment;
+    document.getElementById('f3-dtheta').textContent = f.delta_theta_deg.toFixed(2);
+    document.getElementById('f3-bias').textContent = f.yaw_bias_rad_s.toFixed(4);
+    document.getElementById('f3-seg').textContent = f.straight_segments;
+  }
+
+  // F1 charts
+  if (data.f1_charts && data.f1_charts.waveform) {
+    const c = data.f1_charts;
+    f1Wf.setOption({...chartBase(),
+      yAxis:{...chartBase().yAxis,name:'m/s²',nameTextStyle:{color:'#6b7d8e',fontSize:9}},
+      series:[{type:'line',data:c.waveform.az_filtered.map((v,i)=>[c.waveform.times[i],v]),
+        symbol:'none',lineStyle:{width:1.5,color:'#448aff'},areaStyle:{color:'rgba(68,138,255,0.08)'}}]
+    });
+    const wobble = c.fft.freqs.map(f=>f>=10&&f<=40);
+    f1Fft.setOption({...chartBase(),
+      xAxis:{...chartBase().xAxis,name:'Hz',min:0,max:60},
+      yAxis:{...chartBase().yAxis,name:'|A|'},
+      series:[{type:'bar',data:c.fft.magnitude.map((v,i)=>({value:[c.fft.freqs[i],v],
+        itemStyle:{color:wobble[i]?'rgba(255,171,0,0.7)':'rgba(68,138,255,0.35)'}})),barWidth:2}]
+    });
+  }
+
+  // F2 charts
+  if (data.f2_charts && data.f2_charts.waveform) {
+    const c = data.f2_charts;
+    f2Wf.setOption({...chartBase(),
+      yAxis:{...chartBase().yAxis,name:'norm'},
+      series:[{type:'line',data:c.waveform.amplitude.slice(0,10000).map((v,i)=>[c.waveform.times[i],v]),
+        symbol:'none',lineStyle:{width:1,color:'#18ffff'},areaStyle:{color:'rgba(24,255,255,0.05)'}}],
+      dataZoom:[{type:'slider',bottom:4,height:14,textStyle:{color:'#6b7d8e',fontSize:8}}]
+    });
+    f2Fft.setOption({...chartBase(),
+      xAxis:{...chartBase().xAxis,name:'Hz',min:0,max:4000},
+      yAxis:{...chartBase().yAxis,name:'|A|'},
+      series:[{type:'line',data:c.fft.magnitude.map((v,i)=>[c.fft.freqs[i],v]),
+        symbol:'none',lineStyle:{width:1.5,color:'#18ffff'},areaStyle:{color:'rgba(24,255,255,0.07)'}}]
+    });
+  }
+
+  // F3 charts
+  if (data.f3_charts && data.f3_charts.gyro) {
+    const c = data.f3_charts;
+    f3Gyro.setOption({...chartBase(),
+      xAxis:{...chartBase().xAxis,type:'category',data:c.gyro.times.map(t=>t.toFixed(1)),name:'s'},
+      yAxis:{...chartBase().yAxis,name:'rad/s'},
+      series:[
+        {name:'Gx',type:'line',data:c.gyro.gx,smooth:true,symbol:'none',lineStyle:{width:1,color:'#ff5252'}},
+        {name:'Gy',type:'line',data:c.gyro.gy,smooth:true,symbol:'none',lineStyle:{width:1,color:'#69f0ae'}},
+        {name:'Gz',type:'line',data:c.gyro.gz,smooth:true,symbol:'none',lineStyle:{width:2,color:'#7c4dff'}}
+      ],
+      legend:{bottom:0,textStyle:{color:'#6b7d8e',fontSize:9},data:['Gx','Gy','Gz']}
+    });
+    f3Yaw.setOption({...chartBase(),
+      xAxis:{...chartBase().xAxis,type:'category',data:c.yaw_angle.times.map(t=>t.toFixed(1)),name:'s'},
+      yAxis:{...chartBase().yAxis,name:'°'},
+      series:[{type:'line',data:c.yaw_angle.angle_deg,smooth:true,symbol:'none',
+        lineStyle:{width:2,color:'#ffab00'},areaStyle:{color:'rgba(255,171,0,0.1)'}}]
+    });
+  }
+}
+
+// ==================== TABS ====================
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.detail-panel').forEach(p=>p.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById(this.dataset.panel).classList.add('active');
+    setTimeout(()=>{[f1Wf,f1Fft,f2Wf,f2Fft,f3Gyro,f3Yaw].forEach(c=>{if(c)c.resize();});},100);
+  });
+});
+
+window.addEventListener('resize', ()=>{
+  [gaugeChart,radarChart,f1Wf,f1Fft,f2Wf,f2Fft,f3Gyro,f3Yaw].forEach(c=>{if(c)c.resize();});
+});
+
+// Init charts on first load
+document.addEventListener('DOMContentLoaded', initCharts);
+</script>
+</body>
+</html>
