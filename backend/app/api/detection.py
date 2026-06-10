@@ -13,7 +13,7 @@ from app.schemas import (
 from app.services import detection as detection_service
 router = APIRouter()
 # Jinja2 templates (for dashboard)
-env = Environment(loader=FileSystemLoader("app/templates"), auto_reload=False, undefined=Undefined)
+env = Environment(loader=FileSystemLoader("app/templates"), auto_reload=True, undefined=Undefined)
 # ---------------------------------------------------------------------------
 # Individual detection endpoints (real-time, per-sensor)
 # ---------------------------------------------------------------------------
@@ -159,6 +159,32 @@ async def api_process(
         "f3_charts": _build_f3_charts(gyro),
         "data_summary": result["data_summary"],
     }
+
+@router.post("/process-test")
+async def api_process_test():
+    """Process test data files from data/ directory."""
+    from pathlib import Path
+    from app.services.detection_engine import (
+        parse_sensor_csv, parse_pcm, parse_audio_ts, run_full_detection,
+    )
+    data_dir = Path(__file__).resolve().parents[3] / "data"
+    sensor_file = list(data_dir.glob("*传感器*数据*"))[0]
+    pcm_file = list(data_dir.glob("*.pcm"))[0]
+    ts_file = list(data_dir.glob("*时间戳*"))[0]
+    sensor_text = sensor_file.read_text("utf-8")
+    pcm_bytes = pcm_file.read_bytes()
+    ts_text = ts_file.read_text("utf-8")
+    accel, gyro = parse_sensor_csv(sensor_text)
+    audio = parse_pcm(pcm_bytes)
+    audio_ts_list = parse_audio_ts(ts_text)
+    result = run_full_detection(accel, gyro, audio, audio_ts_list)
+    return {
+        "health": result["health"],
+        "f1_charts": _build_chart_data(accel, gyro, audio, audio_ts_list),
+        "f2_charts": _build_chart_data(accel, gyro, audio, audio_ts_list),
+        "f3_charts": _build_f3_charts(gyro),
+        "data_summary": result["data_summary"],
+    }
 # ---------------------------------------------------------------------------
 # Report query
 # ---------------------------------------------------------------------------
@@ -186,6 +212,99 @@ async def get_health_score(
     report = await detection_service.get_detection_report(db, ride_id)
     return report
 # ---------------------------------------------------------------------------
+# 
+
+
+@router.post("/process-json")
+async def api_process_json(body: dict):
+    import base64
+    from app.services.detection_engine import (
+        parse_sensor_csv, parse_pcm, parse_audio_ts, run_full_detection,
+    )
+    sensor_text = base64.b64decode(body["sensor"]).decode("utf-8")
+    pcm_bytes = base64.b64decode(body["pcm"])
+    ts_text = base64.b64decode(body["audio_ts"]).decode("utf-8")
+    accel, gyro = parse_sensor_csv(sensor_text)
+    audio = parse_pcm(pcm_bytes)
+    audio_ts_list = parse_audio_ts(ts_text)
+    result = run_full_detection(accel, gyro, audio, audio_ts_list)
+    return {
+        "health": result["health"],
+        "f1_charts": _build_chart_data(accel, gyro, audio, audio_ts_list),
+        "f2_charts": _build_chart_data(accel, gyro, audio, audio_ts_list),
+        "f3_charts": _build_f3_charts(gyro),
+        "data_summary": result["data_summary"],
+    }
+
+
+
+
+@router.post("/log-upload-result")
+async def log_upload_result(body: dict):
+    """Log upload diagnostic result."""
+    import os, json as jm
+    path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "diagnostic_result.log")
+    with open(path, "w", encoding="utf-8") as f:
+        jm.dump(body, f, ensure_ascii=False, indent=2)
+    return {"status": "ok"}
+
+@router.get("/diag-upload")
+async def diag_upload_page():
+    """Diagnostic page for testing file uploads."""
+    from fastapi.responses import HTMLResponse
+    html = '''<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Upload Test</title>
+<style>body{background:#111;color:#d4e4f0;font-family:sans-serif;padding:20px}button{padding:10px 24px;font-size:14px;cursor:pointer;background:#448aff;color:#fff;border:none;border-radius:8px}pre{background:#1a2736;padding:12px;border-radius:8px;margin-top:12px;white-space:pre-wrap}</style></head>
+<body>
+<h2>诊断 - 文件上传测试</h2>
+<p>选择三个文件后点"测试上传"</p>
+<input type="file" id="f1" accept=".txt,.csv"><br><br>
+<input type="file" id="f2" accept=".pcm,.raw,.bin"><br><br>
+<input type="file" id="f3" accept=".csv"><br><br>
+<button onclick="test()">测试上传 FormData</button>
+<button onclick="testJSON()" style="margin-left:8px">测试上传 JSON</button>
+<pre id="out">等待测试...</pre>
+<script>
+async function test() {
+  const out = document.getElementById('out');
+  out.textContent = '发送中...';
+  try {
+    const fd = new FormData();
+    fd.append('sensor', document.getElementById('f1').files[0]);
+    fd.append('audio_pcm', document.getElementById('f2').files[0]);
+    fd.append('audio_ts', document.getElementById('f3').files[0]);
+    const r = await fetch('/api/detection/process', {method:'POST',body:fd});
+    if (!r.ok) { out.textContent = 'HTTP ' + r.status + ': ' + await r.text().catch(()=>'') || ''; return; }
+    const d = await r.json();
+    out.textContent = '成功! 评分: ' + d.health.total_score + '\n' + JSON.stringify(d, null, 2);
+  } catch(e) { out.textContent = 'ERROR: ' + e.name + ' ' + e.message + '\\n' + (e.stack || '');
+  try { await fetch('/api/detection/log-upload-result', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:'error',name:e.name,message:e.message,stack:(e.stack||'').slice(0,500)})}); } catch(ex) {} }
+}
+async function testJSON() {
+  const out = document.getElementById('out');
+  function b64(b) { let s=''; new Uint8Array(b).forEach(v=>s+=String.fromCharCode(v)); return btoa(s); }
+  out.textContent = '读取文件中...';
+  try {
+    const [sb,pb,tb] = await Promise.all([
+      document.getElementById('f1').files[0].arrayBuffer(),
+      document.getElementById('f2').files[0].arrayBuffer(),
+      document.getElementById('f3').files[0].arrayBuffer()
+    ]);
+    out.textContent = '发送 JSON 中...';
+    const r = await fetch('/api/detection/process-json', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({sensor:b64(sb),pcm:b64(pb),audio_ts:b64(tb)})
+    });
+    if (!r.ok) { out.textContent = 'HTTP ' + r.status; return; }
+    const d = await r.json();
+    out.textContent = '成功! 评分: ' + d.health.total_score;
+  } catch(e) { out.textContent = 'ERROR: ' + e.name + ' ' + e.message + '\\n' + (e.stack || '').slice(0,500); }
+}
+</script>
+</body>
+</html>''';
+    return HTMLResponse(html);
 # Chart data helpers (for /api/process)
 # ---------------------------------------------------------------------------
 def _build_chart_data(accel, gyro, audio, audio_ts) -> dict:

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -115,6 +115,7 @@
     .chart-row { grid-template-columns: 1fr; }
   }
 </style>
+  <style>.sub-card .bar-wrap{height:3px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:6px;overflow:hidden}.sub-card .bar-fill{height:100%;border-radius:2px;transition:width 0.6s ease;background:#448aff}.summary-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:4px}.stat-item{text-align:center;padding:8px;background:rgba(255,255,255,0.02);border-radius:6px}.stat-item .num{font-size:16px;font-weight:600}.stat-item .lab{font-size:10px;color:var(--text-dim)}.rec-banner{display:none;padding:12px 16px;border-radius:8px;margin-top:10px;font-size:14px;font-weight:600;text-align:center}.rec-good{display:block;background:rgba(0,230,118,0.08);color:var(--green);border:1px solid rgba(0,230,118,0.2)}.rec-caution{display:block;background:rgba(255,171,0,0.08);color:var(--yellow);border:1px solid rgba(255,171,0,0.2)}.rec-bad{display:block;background:rgba(255,23,68,0.08);color:var(--red);border:1px solid rgba(255,23,68,0.2)}.btn-secondary{padding:10px 24px;font-size:13px;font-weight:500;background:transparent;color:var(--cyan);border:1px solid var(--cyan);border-radius:8px;cursor:pointer;transition:all 0.2s}.btn-secondary:hover{background:rgba(24,255,255,0.08)}</style>
 </head>
 <body>
 
@@ -155,9 +156,13 @@
       </label>
     </div>
     <button class="btn-detect" id="btnDetect" disabled>开始检测</button>
+      <button class="btn-secondary" id="btnTestData">U0001f4c2 使用测试数据</button>
   </div>
 
   <!-- ============ LOADING ============ -->
+  <iframe name="uframe" style="display:none"></iframe>
+  <form id="uf" method="post" enctype="multipart/form-data" target="uframe" style="display:none"></form>
+
   <div class="loading" id="loading">
     <div class="spinner"></div>
     <p>正在分析传感器数据与音频特征...</p>
@@ -175,6 +180,7 @@
         <div class="card">
           <div class="card-title"><span class="dot" style="background:var(--cyan)"></span>综合健康评分</div>
           <div id="gauge-chart"></div>
+          <div id="rec-banner" class="rec-banner"></div>
           <div id="score-badge" class="score-badge">
             <div class="score-value">--</div>
             <div class="score-label">--</div>
@@ -189,9 +195,9 @@
           <div id="radar-chart" style="width:100%;height:200px;"></div>
         </div>
         <div class="sub-scores">
-          <div class="sub-card"><div class="val" style="color:var(--blue)" id="v1">--</div><div class="lbl">F1 轮胎偏摆</div></div>
-          <div class="sub-card"><div class="val" style="color:var(--cyan)" id="v2">--</div><div class="lbl">F2 链条异响</div></div>
-          <div class="sub-card"><div class="val" style="color:var(--purple)" id="v3">--</div><div class="lbl">F3 车头不正</div></div>
+          <div class="sub-card"><div class="val" style="color:var(--blue)" id="v1">--</div><div class="lbl">F1 轮胎偏摆</div><div class="bar-wrap"><div class="bar-fill" id="bar1"></div></div></div>
+          <div class="sub-card"><div class="val" style="color:var(--cyan)" id="v2">--</div><div class="lbl">F2 链条异响</div><div class="bar-wrap"><div class="bar-fill" id="bar2"></div></div></div>
+          <div class="sub-card"><div class="val" style="color:var(--purple)" id="v3">--</div><div class="lbl">F3 车头不正</div><div class="bar-wrap"><div class="bar-fill" id="bar3"></div></div></div>
         </div>
       </div>
 
@@ -216,7 +222,9 @@
 
         <div class="detail-panel card" id="panel-f2">
           <div class="info-grid">
+            <div>预测结果<span id="f2-pred">--</span></div>
             <div>包络谱 SNR<span id="f2-snr">--</span> dB</div><div>谐波比<span id="f2-harm">--</span></div>
+            <div>相位一致性<span id="f2-phase">--</span></div>
           </div>
           <div class="chart-row">
             <div><div class="card-title">音频波形 (8kHz)</div><div id="f2-waveform" class="chart-box"></div></div>
@@ -279,34 +287,62 @@ zone.addEventListener('drop', function(e) {
 });
 
 // ==================== DETECTION ====================
-document.getElementById('btnDetect').addEventListener('click', async function() {
-  const btn = this;
-  btn.disabled = true;
-  btn.textContent = '检测中...';
+async function handleDetect() {
+  const btn = document.getElementById('btnDetect'); btn.disabled = true; btn.textContent = '检测中...';
   document.getElementById('loading').classList.add('show');
-  document.getElementById('results').classList.remove('show');
   document.getElementById('errorMsg').style.display = 'none';
 
-  const form = new FormData();
-  form.append('sensor', fileState.sensor);
-  form.append('audio_pcm', fileState.pcm);
-  form.append('audio_ts', fileState.ts);
-
+  let result = null;
   try {
-    const resp = await fetch('/api/detection/process', { method: 'POST', body: form });
-    const data = await resp.json();
-    if (data.error) { showError(data.error); return; }
-    renderResults(data);
-    document.getElementById('results').classList.add('show');
-    document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
-  } catch (e) {
-    showError('请求失败: ' + e.message);
-  } finally {
+    const fd = new FormData();
+    fd.append('sensor', fileState.sensor);
+    fd.append('audio_pcm', fileState.pcm);
+    fd.append('audio_ts', fileState.ts);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+    const resp = await fetch('/api/detection/process', {
+      method: 'POST',
+      body: fd,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      showError('请求失败 (HTTP ' + resp.status + '): ' + text.slice(0, 200));
+      document.getElementById('loading').classList.remove('show');
+      btn.disabled = false; btn.textContent = '开始检测';
+      return;
+    }
+    result = await resp.json();
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      showError('请求超时: 检测耗时过长，请稍后重试');
+    } else {
+      showError('网络错误: ' + (err.message || '未知错误'));
+    }
     document.getElementById('loading').classList.remove('show');
-    btn.disabled = false;
-    btn.textContent = '开始检测';
+    btn.disabled = false; btn.textContent = '开始检测';
+    return;
   }
-});
+
+  if (result && result.health) {
+    try {
+      renderResults(result);
+      document.getElementById('results').classList.add('show');
+      document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+    } catch (e) {
+      showError('渲染检测结果时出错: ' + e.message);
+    }
+  } else {
+    showError('请求失败: 上传失败');
+  }
+  document.getElementById('loading').classList.remove('show');
+  btn.disabled = false; btn.textContent = '开始检测';
+}
+document.getElementById('btnDetect').addEventListener('click', handleDetect);
 
 function showError(msg) {
   const el = document.getElementById('errorMsg');
@@ -362,6 +398,8 @@ function renderResults(data) {
   badge.className = 'score-badge '+lvlClass(S);
   badge.querySelector('.score-value').textContent = S.toFixed(1)+'分';
   badge.querySelector('.score-label').textContent = lvlText(S);
+  var ban=document.getElementById('rec-banner');if(ban){ban.className='rec-banner '+lvlClass(S);ban.textContent='🏆 '+lvlText(S)+' · 综合评分 '+S.toFixed(1);}
+  if(data.data_summary){var ds=data.data_summary;['s-accel','s-gyro','s-audio','s-blocks'].forEach(function(k,i){var el=document.getElementById(k);if(el)el.textContent=ds[['accel_count','gyro_count','audio_samples','audio_ts_blocks'][i]]||'--';});}
   document.getElementById('info-h').textContent = h.harmonic_mean.toFixed(1);
   document.getElementById('info-p').textContent = h.penalty_factor.toFixed(4);
 
@@ -381,6 +419,7 @@ function renderResults(data) {
   document.getElementById('v2').textContent = s2.toFixed(1);
   document.getElementById('v3').textContent = s3.toFixed(1);
   document.getElementById('v1').style.color = lvlColor(s1);
+  ['bar1','bar2','bar3'].forEach((id,i)=>{var el=document.getElementById(id);if(el){el.style.width=[s1,s2,s3][i]+'%';el.style.background=lvlColor([s1,s2,s3][i])}});
   document.getElementById('v2').style.color = lvlColor(s2);
   document.getElementById('v3').style.color = lvlColor(s3);
 
@@ -388,23 +427,23 @@ function renderResults(data) {
   const d = h.details;
   if (d.F1_tire_wobble) {
     const f = d.F1_tire_wobble;
-    document.getElementById('f1-freq').textContent = f.wheel_freq_hz;
-    document.getElementById('f1-flat').textContent = (f.flat_fraction*100).toFixed(0)+'%';
-    document.getElementById('f1-pval').textContent = f.P_value;
-    document.getElementById('f1-amps').textContent = f.amplitude_f+' / '+f.amplitude_2f;
+    var el; (el=document.getElementById('f1-freq')) && (el.textContent = f.wheel_freq_hz);
+    (el=document.getElementById('f1-flat')) && (el.textContent = (f.flat_fraction*100).toFixed(0)+'%');
+    (el=document.getElementById('f1-pval')) && (el.textContent = f.P_value);
+    (el=document.getElementById('f1-amps')) && (el.textContent = f.amplitude_f+' / '+f.amplitude_2f);
   }
   if (d.F2_chain_noise) {
     const f = d.F2_chain_noise;
-    document.getElementById('f2-pred').textContent = f.prediction;
-    document.getElementById('f2-snr').textContent = f.pedal_snr_db.toFixed(1);
-    document.getElementById('f2-harm').textContent = f.harmonic_ratio.toFixed(2);
-    document.getElementById('f2-phase').textContent = f.phase_consistency.toFixed(2);
+    var el; (el=document.getElementById('f2-pred')) && (el.textContent = f.prediction);
+    (el=document.getElementById('f2-snr')) && (el.textContent = f.pedal_snr_db.toFixed(1));
+    (el=document.getElementById('f2-harm')) && (el.textContent = f.harmonic_ratio.toFixed(2));
+    (el=document.getElementById('f2-phase')) && (el.textContent = f.phase_consistency.toFixed(2));
   }
   if (d.F3_handlebar_misalignment) {
     const f = d.F3_handlebar_misalignment;
-    document.getElementById('f3-dtheta').textContent = f.delta_theta_deg.toFixed(2);
-    document.getElementById('f3-bias').textContent = f.yaw_bias_rad_s.toFixed(4);
-    document.getElementById('f3-seg').textContent = f.straight_segments;
+    var el; (el=document.getElementById('f3-dtheta')) && (el.textContent = f.delta_theta_deg.toFixed(2));
+    (el=document.getElementById('f3-bias')) && (el.textContent = f.yaw_bias_rad_s.toFixed(4));
+    (el=document.getElementById('f3-seg')) && (el.textContent = f.straight_segments);
   }
 
   // F1 charts
@@ -482,23 +521,7 @@ window.addEventListener('resize', ()=>{
 document.addEventListener('DOMContentLoaded', initCharts);
 
 // === Pre-loaded detection data (server-side) ===
-window.__BIKE_RESULT__ = {
-  health: {
-    total_score: {{ result.health.total_score }},
-    level: "{{ result.health.level }}",
-    recommendation: "{{ result.health.recommendation }}",
-    harmonic_mean: {{ result.health.harmonic_mean }},
-    penalty_factor: {{ result.health.penalty_factor }},
-    sub_scores: {
-      tire_wobble: {{ result.health.sub_scores.tire_wobble }},
-      chain_noise: {{ result.health.sub_scores.chain_noise }},
-      handlebar_misalignment: {{ result.health.sub_scores.handlebar_misalignment }}
-    }
-  },
-  f1_charts: {},
-  f2_charts: {},
-  f3_charts: {}
-};
+window.__BIKE_RESULT__ = {{ raw | tojson }};
 
 // Preload detection results after DOM + echarts loaded
 document.addEventListener('DOMContentLoaded', function preload() {
@@ -511,7 +534,7 @@ document.addEventListener('DOMContentLoaded', function preload() {
     renderResults(window.__BIKE_RESULT__);
     document.getElementById('results').classList.add('show');
     var uz = document.getElementById('uploadZone');
-    if (uz) uz.style.display = 'none';
+    // Upload zone visible
   } catch(e) {
     console.error('Preload error:', e.message);
   }
