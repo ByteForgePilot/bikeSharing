@@ -422,21 +422,22 @@ def detect_tire_wobble(
 
     # ---- 5. 线性插值评分 ----
     # 阈值基于归一化 FFT 幅值的经验标定
-    # 正常轮胎: P ≤ 0.15（仅路面随机激励）
-    # 严重偏摆: P ≥ 0.60（轮频处显著周期振动）
-    P_healthy = 0.15
+    # P 阈值: 正常轮胎底盘振动线 P ≤ 0.20, 严重偏摆 P ≥ 0.60
+    #   P ≤ 0.20 → 100（正常轮胎，轮频振动可忽略）
+    #   P > 0.20 → 线性衰减到 P=0.60 时得 0
+    P_normal = 0.20
     P_severe = 0.60
 
-    if P <= P_healthy:
+    if P <= P_normal:
         score = 100.0
     elif P >= P_severe:
         score = 0.0
     else:
-        score = 100.0 * (1.0 - (P - P_healthy) / (P_severe - P_healthy))
+        score = 100.0 * (1.0 - (P - P_normal) / (P_severe - P_normal))
 
-    # 非平整路面占比较高时降低可信度
-    if flat_fraction < 0.3:
-        score = min(score, 75.0)
+    # 平整路面惩罚: 仅在极差路况（平整占比 < 20%）时降信度
+    if flat_fraction < 0.2:
+        score = min(score, 85.0)
 
     return {
         "score": round(float(score), 2),
@@ -915,8 +916,8 @@ def detect_handlebar_misalignment(gyro: list[GyroSample]) -> dict:
     delta_theta_deg = 0.7 * delta_theta_from_bias + 0.3 * delta_theta_from_yaw
 
     # ---- 4. 线性插值评分 ----
-    theta_ok = 5.0
-    theta_bad = 15.0
+    theta_ok = 8.0
+    theta_bad = 22.0
 
     if delta_theta_deg <= theta_ok:
         score = 100.0
@@ -962,8 +963,8 @@ def compute_health_score(
     # 加权调和平均
     H = 1.0 / (0.4 / f1_safe + 0.3 / f2_safe + 0.3 / f3_safe)
 
-    # 最小值惩罚
-    penalty = (min(s1, s2, s3) / 100.0) ** 0.5
+    # 最小值惩罚（指数 0.6 比 sqrt 温和: 25分 → 0.44, 50分 → 0.66, 75分 → 0.85）
+    penalty = (min(s1, s2, s3) / 100.0) ** 0.6
 
     # 最终评分
     S = H * penalty

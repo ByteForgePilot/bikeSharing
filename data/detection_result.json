@@ -1,18 +1,18 @@
 {
   "health": {
-    "total_score": 79.29,
-    "harmonic_mean": 87.21,
-    "penalty_factor": 0.9092,
+    "total_score": 81.62,
+    "harmonic_mean": 91.5,
+    "penalty_factor": 0.892,
     "level": "good",
     "recommendation": "推荐骑行",
     "sub_scores": {
-      "tire_wobble": 82.69,
+      "tire_wobble": 93.03,
       "chain_noise": 82.66,
       "handlebar_misalignment": 100.0
     },
     "details": {
       "F1_tire_wobble": {
-        "score": 82.69,
+        "score": 93.03,
         "wheel_freq_hz": 6.18,
         "amplitude_f": 0.156,
         "amplitude_2f": 0.1437,
@@ -38,7 +38,7 @@
     }
   },
   "f1": {
-    "score": 82.69,
+    "score": 93.03,
     "wheel_freq_hz": 6.18,
     "amplitude_f": 0.156,
     "amplitude_2f": 0.1437,

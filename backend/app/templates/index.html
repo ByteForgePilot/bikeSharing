@@ -216,9 +216,7 @@
 
         <div class="detail-panel card" id="panel-f2">
           <div class="info-grid">
-            <div>预测<span id="f2-pred">--</span></div><div>置信度<span id="f2-conf">--</span></div>
             <div>包络谱 SNR<span id="f2-snr">--</span> dB</div><div>谐波比<span id="f2-harm">--</span></div>
-            <div>相位一致性<span id="f2-phase">--</span></div><div>高频能量比<span id="f2-hf">--</span></div>
           </div>
           <div class="chart-row">
             <div><div class="card-title">音频波形 (8kHz)</div><div id="f2-waveform" class="chart-box"></div></div>
@@ -398,11 +396,9 @@ function renderResults(data) {
   if (d.F2_chain_noise) {
     const f = d.F2_chain_noise;
     document.getElementById('f2-pred').textContent = f.prediction;
-    document.getElementById('f2-conf').textContent = f.confidence.toFixed(3);
     document.getElementById('f2-snr').textContent = f.pedal_snr_db.toFixed(1);
     document.getElementById('f2-harm').textContent = f.harmonic_ratio.toFixed(2);
     document.getElementById('f2-phase').textContent = f.phase_consistency.toFixed(2);
-    document.getElementById('f2-hf').textContent = (f.hf_energy_ratio*100).toFixed(1)+'%';
   }
   if (d.F3_handlebar_misalignment) {
     const f = d.F3_handlebar_misalignment;
