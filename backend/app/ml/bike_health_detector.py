@@ -754,17 +754,30 @@ def detect_chain_noise(
     # 每个特征分别归一化到 [0,1]（阈值放宽以扩展中段区分度），
     # 然后加权融合为 anomaly_score。
     # ================================================================
+    # 11b. 正常骑行基线偏移 (Offset Calibration)
+    #
+    # 核心思想：正常骑行必然产生踏频周期的包络调制。
+    #   路面振动 + 踏板运动 + 链条正常运转 → 每个特征都有一个"正常底线"。
+    #   只有显著超过底线的值才计入异常分——相当于一个高通滤波器。
+    #
+    # 各特征偏移说明：
+    #   pedal_snr < 10dB → 视为正常骑行调制，不贡献异常分
+    #   mod_depth < 0.8 → 包络CV未超过正常范围（纯噪声~0.5, 正常骑行~0.7）
+    #   harm_ratio < 0.4 → 偶然谐波不算机械冲击
+    #   phase_cons < 0.4 → 偶然相位对齐不意味周期锁定
+    #   cepstrum < 0.3 → 倒谱微弱周期不算异常
+    # ================================================================
 
-    # 特征归一化: SNR主导，调制深度校准Rayleigh基线
-    snr_score = min(max(pedal_snr - 4.0, 0.0) / 14.0, 1.0)    # <4dB=0, >18dB=1
-    mod_score = min(max(mod_depth - 0.5, 0.0) / 0.4, 1.0)      # baseline=0.5, >0.9=full
-    harm_score = min(harmonic_ratio / 0.8, 1.0)
-    phase_score = min(phase_cons / 0.8, 1.0)
-    # cepstrum_s already in [0,1]
+    # 带偏移的特征归一化
+    snr_score = min(max(pedal_snr - 10.0, 0.0) / 10.0, 1.0)       # 10~20dB = 0~1
+    mod_score = min(max(mod_depth - 0.8, 0.0) / 0.4, 1.0)          # 0.8~1.2 = 0~1
+    harm_score = min(max(harmonic_ratio - 0.4, 0.0) / 0.4, 1.0)    # 0.4~0.8 = 0~1
+    phase_score = min(max(phase_cons - 0.4, 0.0) / 0.4, 1.0)       # 0.4~0.8 = 0~1
+    cep_score = min(max(cepstrum_s - 0.3, 0.0) / 0.5, 1.0)         # 0.3~0.8 = 0~1
 
-    # 加权融合 (SNR 40% primary, mod_depth 25%, harmonics 10% each, cepstrum 15%)
-    anom = (0.40 * snr_score + 0.25 * mod_score +
-            0.10 * harm_score + 0.10 * phase_score + 0.15 * cepstrum_s)
+    # 加权融合
+    anom = (0.35 * snr_score + 0.25 * mod_score +
+            0.10 * harm_score + 0.10 * phase_score + 0.20 * cep_score)
     anomaly_score = min(max(anom, 0.0), 1.0)
 
     # ================================================================
