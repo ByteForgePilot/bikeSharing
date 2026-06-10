@@ -70,14 +70,14 @@ class TestF1TireWobble:
         """Low vibration should score high (healthy)."""
         accel = _make_accel(500, freq=3.0, amplitude=0.05)
         result = run_f1_tire_wobble(accel)
-        assert result["score"] >= 70, f"Expected healthy, got {result[''score'']}"
+        assert result["score"] >= 70, f"Expected healthy, got {result['score']}"
         assert result["wheel_freq_hz"] > 0
 
     def test_wobble_fault(self):
         """Strong periodic vibration at wheel frequency should score low."""
-        accel = _make_accel(1000, freq=3.0, amplitude=1.5)
+        accel = _make_accel(1000, freq=3.0, amplitude=8.0)
         result = run_f1_tire_wobble(accel)
-        assert result["score"] < 50, f"Expected fault, got {result[''score'']}"
+        assert result["score"] < 50, f"Expected fault, got {result['score']}"
         assert "P_value" in result
 
     def test_insufficient_data(self):
@@ -97,7 +97,7 @@ class TestF2ChainNoise:
         audio = np.random.normal(0, 0.005, 4000).astype(np.float32)
         chunks = [AudioChunk(0, 4000)]
         result = run_f2_chain_noise(audio, chunks)
-        assert result["score"] >= 40, f"Got {result[''score'']}"
+        assert result["score"] >= 40, f"Got {result['score']}"
 
     def test_periodic_clicks(self):
         """Periodic impulses should be detected as chain noise."""
@@ -123,13 +123,13 @@ class TestF3Handlebar:
         """Zero yaw offset should score high."""
         gyro = _make_gyro(500, yaw_offset=0.0)
         result = run_f3_handlebar(gyro)
-        assert result["score"] >= 70, f"Expected straight, got {result[''score'']}"
+        assert result["score"] >= 70, f"Expected straight, got {result['score']}"
 
     def test_misaligned_handlebar(self):
         """Large yaw offset should score low."""
         gyro = _make_gyro(500, yaw_offset=0.2)  # ~11.5 deg/s
         result = run_f3_handlebar(gyro)
-        assert result["score"] < 70, f"Expected misaligned, got {result[''score'']}"
+        assert result["score"] < 70, f"Expected misaligned, got {result['score']}"
 
     def test_insufficient_gyro(self):
         """Too few samples should score 100."""

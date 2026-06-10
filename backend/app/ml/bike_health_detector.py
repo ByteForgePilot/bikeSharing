@@ -379,7 +379,7 @@ def detect_tire_wobble(
     window = int(target_fs * 1.0)  # 1 秒窗口
     step = window // 2
     win_vars = sliding_variance(az_filtered, window, step)
-    flat_mask = win_vars < 0.5  # 文档阈值
+    flat_mask = win_vars < 3.0  # 阈值调高以适配真实骑行数据振动强度
     flat_fraction = float(np.mean(flat_mask)) if len(flat_mask) > 0 else 0.0
 
     # 优先使用平整路面片段；若不足则使用全部数据
@@ -737,9 +737,9 @@ def detect_chain_noise(
     # ================================================================
 
     # 包络谱 + cepstrum 得分（核心，权重 0.60）
-    snr_score = max(0.0, min(1.0, 1.0 - pedal_snr / 10.0))        # SNR<1dB→1(异常), >10dB→0
-    harm_score = max(0.0, 1.0 - harmonic_ratio / 0.7)              # 谐波越多越异常
-    phase_score = max(0.0, 1.0 - phase_cons / 0.7)                 # 相位越散越异常
+    snr_score = min(pedal_snr / 10.0, 1.0)                         # 高SNR→1(异常), 低SNR→0
+    harm_score = min(harmonic_ratio / 0.7, 1.0)                    # 高谐波→1(异常), 低谐波→0
+    phase_score = min(phase_cons / 0.7, 1.0)                       # 高一致→1(异常), 低一致→0
     envelope_score = 0.35 * snr_score + 0.25 * harm_score + 0.20 * phase_score + 0.20 * cepstrum_s
 
     # 辅助得分（权重 0.40）
