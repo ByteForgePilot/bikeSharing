@@ -1,9 +1,9 @@
-"""
-共享单车健康快速检测系统 — 核心算法实现 (v2.0)
+﻿"""
+共享单车健康快速检测系统 — 核心算法实现 (v3.0)
 
-根据设计文档 v2 的三级检测架构：
+根据设计文档 v3 的三级检测架构：
   F1 — 轮胎偏摆检测：IMU Z轴 → FFT → 轮频 f 与 2f 幅值 → P=A1+0.5*A2
-  F2 — 链条异响检测：8kHz 音频 → 13维MFCC → SVM 分类器 → 置信度评分
+  F2 — 链条异响检测：8kHz 音频 → 2~4kHz带通 → 包络谱 → 四特征融合 → 分段评分
   F3 — 车头不正检测：IMU偏航角 vs GPS航向角偏差 Δθ → 线性插值评分
 
 综合评分（木桶效应）：
@@ -683,9 +683,9 @@ def detect_chain_noise(
                 lag_s = (lo_idx + best) / target_fs
                 pedal_freq_hz = 1.0 / lag_s
             else:
-                pedal_freq_hz = 3.0
+                pedal_freq_hz = 2.0
         else:
-            pedal_freq_hz = 3.0
+            pedal_freq_hz = 2.0
     # 防御：限制踏频在合理范围
     pedal_freq_hz = max(min(pedal_freq_hz, 8.0), 0.5)
 
@@ -696,6 +696,14 @@ def detect_chain_noise(
     envelope = _hilbert_envelope(filtered)
     # 低通保留 0.5~10Hz（踏频及其低次谐波范围）
     envelope_lp = _lowpass_filter(envelope, target_fs, 10.0, order=4)
+
+    # ---- 4.5. 包络调制深度（AM 深度） ----
+    # 链条异响的本质是强烈的振幅调制：金属冲击 → 2~4kHz 能量剧增，
+    # 间隙 → 能量骤降。正常骑行也有踏频调制，但幅度平缓得多。
+    # CV = std/mean，高于 0.3 意味明显调制，高于 0.6 意味强烈调制。
+    envelope_mean = float(np.mean(envelope_lp))
+    envelope_std = float(np.std(envelope_lp))
+    mod_depth = envelope_std / (envelope_mean + 1e-10)
 
     # ---- 5. 包络谱 SNR @ 踏频 ----
     pedal_snr = _envelope_spectrum_snr(envelope_lp, target_fs, pedal_freq_hz)
@@ -735,23 +743,48 @@ def detect_chain_noise(
     #   hf_ratio:      高频能量比
     #   crest_factor:  峰值因子
     # ================================================================
-
-    # 异常得分：仅三个核心特征
-    snr_score = min(pedal_snr / 10.0, 1.0)                         # 高SNR→1(异常), 低SNR→0
-    harm_score = min(harmonic_ratio / 0.7, 1.0)                    # 高谐波→1(异常), 低谐波→0
-    phase_score = min(phase_cons / 0.7, 1.0)                       # 高一致→1(异常), 低一致→0
-    anomaly_score = 0.40 * snr_score + 0.35 * harm_score + 0.25 * phase_score
-    anomaly_score = min(max(anomaly_score, 0.0), 1.0)
-
-    # ================================================================
-    # 12. 连续评分 + 三级分级
-    #     score 0-100, 越高链条状况越好
-    #     "良好" >= 70: 链条正常或极轻微噪音
-    #     "轻微" 40-70: 有一定链条噪音, 可继续使用但需注意
-    #     "异响" < 40:  明显链条异响, 建议检修
+    # 11. 异常得分融合（四特征融合）
+    #
+    # 四个核心特征各自反映链条异响的不同侧面：
+    #   pedal_snr:      包络谱在踏频处的 SNR（dB）。>10dB 强周期冲击
+    #   harmonic_ratio: 谐波存在比例（0~1）。>0.6 机械冲击特征明显
+    #   phase_cons:     冲击相位一致性（0~1）。>0.6 间隔锁定在曲柄相位
+    #   cepstrum_s:     Cepstrum 周期性得分（0~1）。>0.6 冲击间隔离散度低
+    #
+    # 每个特征分别归一化到 [0,1]（阈值放宽以扩展中段区分度），
+    # 然后加权融合为 anomaly_score。
     # ================================================================
 
-    score = max(0.0, min(100.0, 100.0 * (1.0 - anomaly_score)))
+    # 特征归一化: SNR主导，调制深度校准Rayleigh基线
+    snr_score = min(max(pedal_snr - 4.0, 0.0) / 14.0, 1.0)    # <4dB=0, >18dB=1
+    mod_score = min(max(mod_depth - 0.5, 0.0) / 0.4, 1.0)      # baseline=0.5, >0.9=full
+    harm_score = min(harmonic_ratio / 0.8, 1.0)
+    phase_score = min(phase_cons / 0.8, 1.0)
+    # cepstrum_s already in [0,1]
+
+    # 加权融合 (SNR 40% primary, mod_depth 25%, harmonics 10% each, cepstrum 15%)
+    anom = (0.40 * snr_score + 0.25 * mod_score +
+            0.10 * harm_score + 0.10 * phase_score + 0.15 * cepstrum_s)
+    anomaly_score = min(max(anom, 0.0), 1.0)
+
+    # ================================================================
+    # 12. 连续评分 + 三级分级（分段映射）
+    #
+    # 分段映射替代线性一刀切，为"轻微"段留出更宽区间：
+    #   异常分 < 0.20 → 100（正常路面噪音，无周期结构）
+    #   0.20 ~ 0.45 → 100~70（轻微周期成分 → "良好"下限）
+    #   0.45 ~ 0.70 → 70~30（中等周期性 → "轻微"区间）
+    #   0.70 ~ 1.00 → 30~0（强周期冲击 → "异响"区间）
+    # ================================================================
+
+    if anomaly_score < 0.20:
+        score = 100.0
+    elif anomaly_score < 0.45:
+        score = 100.0 - 30.0 * (anomaly_score - 0.20) / 0.25
+    elif anomaly_score < 0.70:
+        score = 70.0 - 40.0 * (anomaly_score - 0.45) / 0.25
+    else:
+        score = max(0.0, 30.0 - 30.0 * (anomaly_score - 0.70) / 0.30)
 
     if score >= 70:
         level = "良好"
@@ -766,6 +799,8 @@ def detect_chain_noise(
         "pedal_snr_db": round(float(pedal_snr), 2),
         "harmonic_ratio": round(float(harmonic_ratio), 3),
         "phase_consistency": round(float(phase_cons), 3),
+        "modulation_depth": round(float(mod_depth), 4),
+        "cepstrum_score": round(float(cepstrum_s), 4),
         "anomaly_score": round(float(anomaly_score), 4),
     }
 
@@ -1000,7 +1035,7 @@ def main() -> None:
     print("  ├─ F2 链条异响检测 ...")
     pedal_freq = f1["wheel_freq_hz"]
     f2 = detect_chain_noise(audio, audio_ts, pedal_freq_hz=pedal_freq)
-    print(f"  │   踏频: {pedal_freq:.1f} Hz | 预测: {f2['prediction']} | 置信度: {f2['confidence']:.3f}")
+    print(f"  │   踏频: {pedal_freq:.1f} Hz | 预测: {f2['prediction']} | 异常分: {f2['anomaly_score']:.3f}")
     print(f"  │   包络谱SNR: {f2['pedal_snr_db']:.1f} dB | 谐波比: {f2['harmonic_ratio']:.2f} | 相位一致性: {f2['phase_consistency']:.2f}")
     print(f"  │   评分: {f2['score']:.1f}")
 

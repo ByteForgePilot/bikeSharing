@@ -1,13 +1,13 @@
 {
   "health": {
-    "total_score": 13.86,
-    "harmonic_mean": 35.84,
-    "penalty_factor": 0.3867,
-    "level": "bad",
-    "recommendation": "建议换车",
+    "total_score": 57.5,
+    "harmonic_mean": 76.26,
+    "penalty_factor": 0.7541,
+    "level": "caution",
+    "recommendation": "谨慎使用",
     "sub_scores": {
       "tire_wobble": 82.69,
-      "chain_noise": 14.95,
+      "chain_noise": 56.86,
       "handlebar_misalignment": 100.0
     },
     "details": {
@@ -20,12 +20,14 @@
         "flat_fraction": 0.393
       },
       "F2_chain_noise": {
-        "score": 14.95,
-        "prediction": "异响",
+        "score": 56.86,
+        "prediction": "轻微",
         "pedal_snr_db": 6.68,
         "harmonic_ratio": 0.667,
         "phase_consistency": 0.711,
-        "anomaly_score": 0.8505
+        "modulation_depth": 0.7133,
+        "cepstrum_score": 1.0,
+        "anomaly_score": 0.5321
       },
       "F3_handlebar_misalignment": {
         "score": 100.0,
@@ -44,12 +46,14 @@
     "flat_fraction": 0.393
   },
   "f2": {
-    "score": 14.95,
-    "prediction": "异响",
+    "score": 56.86,
+    "prediction": "轻微",
     "pedal_snr_db": 6.68,
     "harmonic_ratio": 0.667,
     "phase_consistency": 0.711,
-    "anomaly_score": 0.8505
+    "modulation_depth": 0.7133,
+    "cepstrum_score": 1.0,
+    "anomaly_score": 0.5321
   },
   "f3": {
     "score": 100.0,

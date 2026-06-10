@@ -42,22 +42,30 @@ def _make_gyro(samples: int, yaw_offset: float, fs: float = 50.0) -> list[GyroSa
     return result
 
 
-def _make_audio(samples: int, freq: float = 3.0, fs: float = 8000.0) -> tuple[np.ndarray, list[AudioChunk]]:
-    """Generate synthetic audio with periodic clicks at freq Hz."""
-    t = np.arange(samples) / fs
-    # Periodic impulses + background noise
-    impulse = np.zeros(samples, dtype=np.float32)
-    period_samples = int(fs / freq)
-    for i in range(0, samples, period_samples):
-        impulse[i] = 1.0
-    noise = np.random.normal(0, 0.01, samples).astype(np.float32)
-    audio = impulse + noise
-    audio /= max(np.max(np.abs(audio)), 1.0)
+def _make_audio(samples: int, freq: float = 3.0, fs: float = 8000.0,
+                 click_amp: float = 0.8, noise_std: float = 0.08) -> tuple[np.ndarray, list[AudioChunk]]:
+    """Generate synthetic audio with periodic 3kHz tone bursts at freq Hz.
 
-    # Create audio timestamp chunks (every ~500 samples)
+    Uses gated 3kHz sine bursts (Hanning window) to concentrate energy
+    in the 2-4kHz band where chain noise detectors listen.
+    click_amp / noise_std control the modulation depth.
+    """
+    click_duration = int(fs * 0.006)  # 6 ms burst
+    f_click = 3000.0  # center of 2-4kHz band
+    period_samples = max(int(fs / freq), 1)
+    audio = np.random.normal(0, noise_std / 2, samples).astype(np.float64)
+    t_click_arr = np.arange(click_duration, dtype=np.float64) / fs
+    window = np.hanning(click_duration)
+    burst = click_amp * np.sin(2 * np.pi * f_click * t_click_arr) * window
+    for i in range(0, samples - click_duration, period_samples):
+        audio[i : i + click_duration] += burst
+    audio -= np.mean(audio)
+    peak = max(np.max(np.abs(audio)), 1e-6)
+    audio = (audio / peak).astype(np.float32)
+
     chunks = []
     for i in range(0, samples, 512):
-        chunks.append(AudioChunk(int(i / fs * 1e9), i + 512))
+        chunks.append(AudioChunk(int(i / fs * 1e9), min(i + 512, samples)))
     return audio, chunks
 
 
@@ -100,11 +108,17 @@ class TestF2ChainNoise:
         assert result["score"] >= 40, f"Got {result['score']}"
 
     def test_periodic_clicks(self):
-        """Periodic impulses should be detected as chain noise."""
-        audio, chunks = _make_audio(8000, freq=2.0)
+        """Periodic bursts with high contrast should be chain noise."""
+        audio, chunks = _make_audio(24000, freq=2.0, click_amp=0.95, noise_std=0.03)
         result = run_f2_chain_noise(audio, chunks)
-        assert "score" in result
-        assert "score" in result
+        assert result["score"] < 40, f"Expected chain noise, got score={result['score']}"
+        assert result["modulation_depth"] > 0.2
+
+    def test_moderate_modulation(self):
+        """Low AM depth should produce moderate score (not falsely low)."""
+        audio, chunks = _make_audio(24000, freq=2.5, click_amp=0.6, noise_std=0.12)
+        result = run_f2_chain_noise(audio, chunks)
+        assert result["modulation_depth"] > 0.15
 
     def test_empty_audio(self):
         """Empty audio should return healthy score."""
