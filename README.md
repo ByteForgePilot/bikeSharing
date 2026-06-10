@@ -1,168 +1,168 @@
-# bikeSharing -- Shared Bike Fault Detection Platform
+﻿# bikeSharing -- 共享单车故障检测平台
 
-Mobile sensor-based shared bike fault detection: ride, collect sensor data, get instant health scores.
+基于智能手机传感器的共享单车故障检测：骑行、采集传感器数据、实时获取健康评分。
 
-## Architecture
+## 系统架构
 
 ```
-BicycleDataLogger (Android)
-    Accel 100Hz + Gyro 50Hz + GPS 10Hz + Audio 8kHz PCM
+BicycleDataLogger (Android 数据采集 App)
+    加速度计 100Hz + 陀螺仪 50Hz + GPS 10Hz + 音频 8kHz PCM
         |
-        |  POST /api/detection/upload/{ride_id}  (sensor CSV + PCM + timestamps)
+        |  POST /api/detection/upload/{ride_id} (传感器 CSV + PCM + 时间戳)
         v
-FastAPI Backend  (port 8000)
+FastAPI 后端 (端口 8000)
     |
-    +-- /api/auth/*           JWT authentication
-    +-- /api/rides/*          Ride lifecycle (start/end/data)
-    +-- /api/detection/upload Full 3-level detection
-    +-- /api/detection/*      Individual fault endpoints
-    +-- /api/detection/dashboard   ECharts web dashboard
+    +-- /api/auth/*           JWT 认证
+    +-- /api/rides/*          骑行生命周期（开始/结束/数据）
+    +-- /api/detection/upload 三级全量检测
+    +-- /api/detection/*      各故障独立接口
+    +-- /api/detection/dashboard   ECharts 网页仪表板
     |
     v
-Detection Engine (v3.0)
-    F1: Tire Wobble     -- FFT + wheel-frequency analysis
-    F2: Chain Noise     -- Envelope spectrum + cepstrum
-    F3: Handlebar       -- Gyro yaw bias + straight-segment
-    Composite: Weighted harmonic mean + penalty factor (0-100)
+检测引擎 (v3.0)
+    F1: 轮胎偏摆   -- FFT + 车轮频率分析
+    F2: 链条异响   -- 包络谱 + 倒谱分析
+    F3: 车头不正   -- 陀螺仪偏航偏差 + 直行段检测
+    综合: 加权调和平均 + 惩罚因子 (0-100)
     |
     v
 PostgreSQL + Redis
 ```
 
-## Quick Start
+## 快速开始
 
-### 1. Docker (recommended)
+### 1. Docker（推荐）
 
 ```bash
-cp .env.example .env      # optional, defaults work
-docker compose up -d       # db + redis + backend on port 8000
+cp .env.example .env      # 可选，默认值即可运行
+docker compose up -d       # 启动 db + redis + 后端，端口 8000
 ```
 
-The backend auto-creates database tables on first start. Dashboard at http://localhost:8000/api/detection/dashboard.
+后端首次启动时自动创建数据库表。仪表板访问 http://localhost:8000/api/detection/dashboard。
 
-### 2. Local Development
+### 2. 本地开发
 
 ```bash
-# Start infrastructure only
+# 仅启动基础设施
 docker compose up -d db redis
 
-# Install backend deps
+# 安装后端依赖
 cd backend
 pip install -r requirements.txt
 
-# Run
+# 启动
 uvicorn app.main:app --reload --port 8000
 ```
 
+### 3. 独立运行模式（无需 Docker）
 
-### 3. Standalone Mode (No Docker)
-
-`ash
-# Backend starts without PostgreSQL/Redis
+```bash
+# 后端启动，无需 PostgreSQL/Redis
 cd backend
 python -m uvicorn app.main:app --reload --port 8000
 
-# Only these endpoints are available without DB:
-#   GET  /api/detection/dashboard   -- ECharts dashboard
-#   POST /api/detection/process     -- File upload detection (no auth)
+# 无需数据库时可用的接口：
+#   GET  /api/detection/dashboard   -- ECharts 仪表板
+#   POST /api/detection/process     -- 文件上传检测（无需认证）
 
-# DB-requiring endpoints (auth, rides, upload) will fail gracefully.
-`
+# 需要数据库的接口（auth、rides、upload）会优雅地返回错误。
+```
 
-### 4. Run Detection on Local Sensor Data
+### 4. 在本地传感器数据上运行检测
 
-`ash
-# No server needed -- runs detection directly on data/ files
-cd E:\Project\personal\bikrsharing
+```bash
+# 无需服务器 -- 直接在 data/ 目录上运行检测
+cd bikrsharing
 python data/run_detection.py
 
-# Reads data/�的传感器数据.txt + 音频.pcm + 音频_时间戳.csv
-# Runs F1/F2/F3 + composite health score
-# Saves detailed results to data/detection_result.json
-`
+# 读取 data/传感器数据.txt + 音频.pcm + 音频_时间戳.csv
+# 运行 F1/F2/F3 + 综合健康评分
+# 将详细结果保存到 data/detection_result.json
+```
 
-The data/ directory contains real sensor data collected by BicycleDataLogger, ready for testing the detection pipeline.
-### 3. Mobile Data Collection
+data/ 目录包含 BicycleDataLogger 采集的真实传感器数据，可直接用于测试检测管线。
 
-Open `BicycleDataLogger/` in Android Studio, build and install the APK. The app collects:
-- Accelerometer @ 100Hz
-- Gyroscope @ 50Hz
-- GPS @ 10Hz (with network location fallback)
-- Audio @ 8kHz 16-bit PCM mono
+### 5. 移动端数据采集
 
-Ride data is saved to `Documents/自行车数据/<timestamp>/` as three files:
-- `传感器数据.txt` -- CSV: timestamp_ns, sensor_type, ax, ay, az, lat, lng, speed, course, gx, gy, gz
-- `音频.pcm` -- 16-bit little-endian PCM
+在 Android Studio 中打开 `BicycleDataLogger/`，构建并安装 APK。App 采集以下数据：
+- 加速度计 @ 100Hz
+- 陀螺仪 @ 50Hz
+- GPS @ 10Hz（支持网络定位备选）
+- 音频 @ 8kHz 16-bit PCM 单声道
+
+骑行数据保存到 `Documents/自行车数据/<timestamp>/`，包含三个文件：
+- `传感器数据.txt` -- CSV：timestamp_ns, sensor_type, ax, ay, az, lat, lng, speed, course, gx, gy, gz
+- `音频.pcm` -- 16-bit 小端 PCM
 - `音频_时间戳.csv` -- timestamp_ns, cumulative_samples
 
-Upload these three files to `POST /api/detection/upload/{ride_id}` for full analysis.
+将这三个文件上传到 `POST /api/detection/upload/{ride_id}` 进行全量分析。
 
-## API Overview
+## API 概览
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/register` | Register device account |
-| POST | `/api/auth/login` | Get JWT token |
-| POST | `/api/rides/start` | Start a ride |
-| POST | `/api/rides/{id}/end` | End a ride |
-| POST | `/api/rides/{id}/sensor-data` | Upload sensor readings |
-| POST | `/api/rides/{id}/audio` | Upload audio for chain detection |
-| POST | `/api/detection/upload/{id}` | Upload BicycleDataLogger files for full detection |
-| POST | `/api/detection/process` | Standalone file-upload detection (no auth) |
-| GET | `/api/detection/report/{id}` | Get detection report |
-| GET | `/api/detection/health-score/{id}` | Get composite health score |
-| GET | `/api/detection/dashboard` | Web visualization dashboard |
+| 方法 | 接口 | 说明 |
+|------|------|------|
+| POST | `/api/auth/register` | 注册设备账号 |
+| POST | `/api/auth/login` | 获取 JWT 令牌 |
+| POST | `/api/rides/start` | 开始骑行 |
+| POST | `/api/rides/{id}/end` | 结束骑行 |
+| POST | `/api/rides/{id}/sensor-data` | 上传传感器读数 |
+| POST | `/api/rides/{id}/audio` | 上传音频用于链条检测 |
+| POST | `/api/detection/upload/{id}` | 上传 BicycleDataLogger 文件进行全量检测 |
+| POST | `/api/detection/process` | 独立文件上传检测（无需认证） |
+| GET | `/api/detection/report/{id}` | 获取检测报告 |
+| GET | `/api/detection/health-score/{id}` | 获取综合健康评分 |
+| GET | `/api/detection/dashboard` | 网页可视化仪表板 |
 
-Full Swagger docs at http://localhost:8000/docs.
+完整 Swagger 文档访问 http://localhost:8000/docs。
 
-## Detection System (v3.0)
+## 检测系统 (v3.0)
 
-Three-fault detection using the phone''s built-in sensors:
+使用手机内置传感器进行三项故障检测：
 
-1. **F1 Tire Wobble** -- FFT analysis of Z-axis acceleration. Extracts wheel rotation frequency and computes wobble characteristic P = A1 + 0.5*A2. Uses flat-road window selection for reliable readings.
+1. **F1 轮胎偏摆** -- 对 Z 轴加速度做 FFT 分析。提取车轮旋转频率并计算偏摆特征 P = A1 + 0.5*A2。使用平坦路面窗口选择确保读数可靠。
 
-2. **F2 Chain Noise** -- Envelope spectrum analysis of 8kHz audio. Hilbert transform extracts pedal-frequency envelope, SNR + harmonic detection + cepstrum periodic analysis identify chain-specific impacts vs environmental noise.
+2. **F2 链条异响** -- 对 8kHz 音频做包络谱分析。希尔伯特变换提取踏板频率包络，结合 SNR + 谐波检测 + 倒谱周期分析，区分链条冲击与环境噪声。
 
-3. **F3 Handlebar Misalignment** -- Gyro Z-axis yaw bias detection. Selects straight-riding segments (lowest gz variance windows) and computes equivalent steering offset angle.
+3. **F3 车头不正** -- 陀螺仪 Z 轴偏航偏差检测。选择直行路段（最低 gz 方差的窗口），计算等效转向偏角。
 
-**Composite scoring**: Weighted harmonic mean (0.4/0.3/0.3) with minimum penalty factor ("barrel effect" -- a single severe fault pulls down the overall score).
+**综合评分**：加权调和平均（0.4/0.3/0.3）配合最小值惩罚因子（"木桶效应"——单个严重故障拉低总分）。
 
-| Score | Level | Recommendation |
-|-------|-------|----------------|
-| >= 70 | Good | 推荐骑行 |
-| 50-69 | Caution | 谨慎使用 |
-| < 50 | Bad | 建议换车 |
+| 评分 | 等级 | 建议 |
+|------|------|------|
+| >= 70 | 良好 | 推荐骑行 |
+| 50-69 | 注意 | 谨慎使用 |
+| < 50 | 较差 | 建议换车 |
 
-## Project Structure
+## 项目结构
 
 ```
 bikrsharing/
-+-- data/                  Real sensor data + detection runner
-|   +-- run_detection.py   Standalone detection script (no server)
-|   +-- 传感器数据.txt        Accelerometer/gyro/GPS CSV
-|   +-- 音频.pcm              16-bit LE PCM audio
-|   +-- 音频_时间戳.csv         Audio timestamp mapping
-+-- BicycleDataLogger/     Native Android data collection app (Kotlin)
++-- data/                  真实传感器数据 + 检测运行器
+|   +-- run_detection.py   独立检测脚本（无需服务器）
+|   +-- 传感器数据.txt       加速度计/陀螺仪/GPS CSV
+|   +-- 音频.pcm            16-bit LE PCM 音频
+|   +-- 音频_时间戳.csv      音频时间戳映射
++-- BicycleDataLogger/     原生 Android 数据采集 App (Kotlin)
 +-- backend/
 |   +-- app/
-|   |   +-- api/           FastAPI route handlers
-|   |   +-- core/          JWT security
-|   |   +-- ml/            Detection algorithm v3.0
-|   |   +-- models/        SQLAlchemy ORM models
-|   |   +-- repositories/  Database access layer
-|   |   +-- schemas/       Pydantic request/response schemas
-|   |   +-- services/      Business logic + detection engine
-|   |   +-- templates/     ECharts dashboard HTML
+|   |   +-- api/           FastAPI 路由处理
+|   |   +-- core/          JWT 安全
+|   |   +-- ml/            检测算法 v3.0
+|   |   +-- models/        SQLAlchemy ORM 模型
+|   |   +-- repositories/  数据库访问层
+|   |   +-- schemas/       Pydantic 请求/响应模式
+|   |   +-- services/      业务逻辑 + 检测引擎
+|   |   +-- templates/     ECharts 仪表板 HTML
 |   +-- tests/
-+-- docs/                  Project documentation
-+-- docker-compose.yml     Docker orchestration
++-- docs/                  项目文档
++-- docker-compose.yml     Docker 编排
 ```
 
-## Testing
+## 测试
 
 ```bash
 cd backend
-pytest tests/test_detection_engine.py -v    # Detection algorithm tests
-pytest tests/test_api.py -v                  # API integration tests
-pytest tests/test_rides_db.py -v             # Database tests
+pytest tests/test_detection_engine.py -v    # 检测算法测试
+pytest tests/test_api.py -v                  # API 集成测试
+pytest tests/test_rides_db.py -v             # 数据库测试
 ```

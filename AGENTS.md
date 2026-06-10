@@ -1,103 +1,103 @@
-# Repository Guidelines
+﻿# 仓库指南
 
-## Project Structure
+## 项目结构
 
-`
+```
 bikrsharing/
-├── BicycleDataLogger/          # Native Android data collector (Kotlin, Jetpack Compose)
+├── BicycleDataLogger/          # 原生 Android 数据采集 App (Kotlin, Jetpack Compose)
 │   └── app/src/main/java/com/bicycle/datalogger/
 │       ├── sensors/            # AccelCollector, GyroCollector, GpsCollector, AudioCollector, SensorService
 │       └── ui/screens/         # Compose UI
-├── data/                       # Real sensor data + standalone detection runner
-│   ├── 传感器数据.txt            # Accelerometer + gyroscope + GPS CSV
-│   ├── 音频.pcm                  # 16-bit LE PCM audio
-│   ├── 音频_时间戳.csv            # Audio timestamp mapping
-│   └── run_detection.py         # Standalone detection script (no server needed)
+├── data/                       # 真实传感器数据 + 独立检测运行器
+│   ├── 传感器数据.txt            # 加速度计 + 陀螺仪 + GPS CSV
+│   ├── 音频.pcm                  # 16-bit LE PCM 音频
+│   ├── 音频_时间戳.csv            # 音频时间戳映射
+│   └── run_detection.py         # 独立检测脚本（无需服务器）
 ├── backend/
 │   └── app/
-│       ├── api/                # FastAPI route handlers (auth, rides, detection)
-│       ├── core/               # JWT security
-│       ├── ml/                 # Detection algorithm v3.0 (bike_health_detector.py)
+│       ├── api/                # FastAPI 路由处理（auth, rides, detection）
+│       ├── core/               # JWT 安全
+│       ├── ml/                 # 检测算法 v3.0 (bike_health_detector.py)
 │       ├── models/             # SQLAlchemy ORM (User, Ride, FaultReport)
-│       ├── repositories/       # DB access layer
-│       ├── schemas/            # Pydantic request/response models
-│       ├── services/           # Business logic + detection engine adapter
-│       └── templates/          # ECharts dashboard HTML (Jinja2)
+│       ├── repositories/       # 数据库访问层
+│       ├── schemas/            # Pydantic 请求/响应模型
+│       ├── services/           # 业务逻辑 + 检测引擎适配器
+│       └── templates/          # ECharts 仪表板 HTML (Jinja2)
 │   └── tests/                  # pytest (test_detection_engine, test_api, test_rides_db)
-├── docs/                       # Project documentation (00-09)
-├── docker-compose.yml          # PostgreSQL + Redis + Backend
-└── AGENTS.md                   # This file
-`
+├── docs/                       # 项目文档 (00-09)
+├── docker-compose.yml          # PostgreSQL + Redis + 后端
+└── AGENTS.md                   # 本文件
+```
 
-## Build, Test, and Development Commands
+## 构建、测试与开发命令
 
-`ash
-# Full stack (Docker)
-docker compose up -d                            # db + redis + backend on :8000
+```bash
+# 全栈 (Docker)
+docker compose up -d                            # db + redis + 后端，端口 :8000
 
-# Local backend dev (standalone mode, no Docker/DB)
+# 本地后端开发（独立模式，无需 Docker/DB）
 cd backend
-python -m uvicorn app.main:app --reload --port 8000   # Dashboard + /process endpoint
-                                                       # DB endpoints error gracefully
+python -m uvicorn app.main:app --reload --port 8000   # 仪表板 + /process 接口
+                                                       # DB 接口会优雅报错
 
-# Install dependencies
+# 安装依赖
 cd backend && pip install -r requirements.txt
 
-# Run detection on real data (no server needed)
-cd E:\Project\personal\bikrsharing
-python data/run_detection.py                          # Reads data/ files, prints + saves JSON
+# 在真实数据上运行检测（无需服务器）
+cd bikrsharing
+python data/run_detection.py                          # 读取 data/ 文件，打印并保存 JSON
 
-# Run tests
-cd backend && pytest tests/ -v                          # All tests
-cd backend && pytest tests/test_detection_engine.py -v   # Detection engine only
-cd backend && pytest tests/test_api.py -v                # API integration
+# 运行测试
+cd backend && pytest tests/ -v                          # 全部测试
+cd backend && pytest tests/test_detection_engine.py -v   # 仅检测引擎
+cd backend && pytest tests/test_api.py -v                # API 集成测试
 
-# Android build
+# Android 构建
 cd BicycleDataLogger && ./gradlew assembleDebug
-`
+```
 
-## Coding Style & Naming
+## 编码风格与命名
 
-- **Python**: 4-space indentation. Follow PEP 8. Type hints for function signatures.
-- **Python encoding**: All .py files must be UTF-8 **without BOM**. Avoid UTF-16LE (causes "null bytes" SyntaxError).
-- **Kotlin**: Standard Kotlin conventions. 4-space indentation.
-- **File naming**: snake_case for Python modules, PascalCase for Kotlin classes.
-- **DB columns**: snake_case matching SQLAlchemy ORM attributes.
-- No formatter or linter enforced at this stage.
+- **Python**：4 空格缩进。遵循 PEP 8。函数签名使用类型注解。
+- **Python 编码**：所有 .py 文件必须使用 UTF-8 **无 BOM**。避免 UTF-16LE（会导致 "null bytes" SyntaxError）。
+- **Kotlin**：标准 Kotlin 约定。4 空格缩进。
+- **文件命名**：Python 模块使用 snake_case，Kotlin 类使用 PascalCase。
+- **数据库列**：snake_case，与 SQLAlchemy ORM 属性一致。
+- 当前阶段不强制使用格式化工具或 linter。
 
-## Testing Guidelines
+## 测试指南
 
-- Framework: pytest with pytest-asyncio for async tests.
-- Test files: 	ests/test_<module>.py.
-- Test classes: Test<Feature> grouping related cases.
-- Coverage focus: detection engine (F1/F2/F3 pipelines), API endpoints, DB operations.
-- Minimum data: synthetic sensor data (_make_accel, _make_gyro, _make_audio helpers).
+- 框架：pytest + pytest-asyncio（用于异步测试）。
+- 测试文件：`tests/test_<模块>.py`。
+- 测试类：`Test<功能>` 分组相关用例。
+- 覆盖重点：检测引擎（F1/F2/F3 管线）、API 接口、数据库操作。
+- 最少数据：合成传感器数据（_make_accel、_make_gyro、_make_audio 辅助函数）。
 
-## Commit & PR Guidelines
+## 提交与 PR 指南
 
-- Commit messages: Chinese or English. Format: <version/tag>: <summary> (e.g., 2.0: Integrate algorithm v3.0).
-- Keep commits focused — one logical change per commit.
-- PRs should include: a brief description of changes, any new dependencies, and test results.
-- Link related issues when applicable.
+- 提交信息：中文或英文。格式：`<版本/标签>: <摘要>`（例如 `v3.0: Integrate algorithm v3.0`）。
+- 保持提交聚焦 —— 每次提交一个逻辑变更。
+- PR 应包括：变更简述、新增依赖说明、测试结果。
+- 关联相关 issue。
 
-## Architecture Notes
+## 架构说明
 
-- **Detection pipeline**: BicycleDataLogger -> CSV/PCM files -> POST /api/detection/upload/{ride_id} -> detection_engine.py -> ike_health_detector.py (v3.0) -> FaultReport in PostgreSQL.
-- **Standalone mode**: Backend starts without PostgreSQL/Redis. /api/detection/dashboard and /api/detection/process work independently. The process endpoint uses pp.services.detection_engine directly, not the DB layer.
-- **data/run_detection.py**: Runs full detection (F1/F2/F3 + composite score) on local sensor data without any server infrastructure. Results saved to data/detection_result.json.
-- **Dashboard**: Served at /api/detection/dashboard via Jinja2 Environment + ECharts. Template directory is pp/templates (relative to ackend/).
-- **Scoring**: Three sub-scores (0-100) combined via weighted harmonic mean with minimum penalty factor ("barrel effect").
-- **Auth**: JWT-based. Auto-registration on first launch with device ID.
+- **检测管线**：BicycleDataLogger -> CSV/PCM 文件 -> POST /api/detection/upload/{ride_id} -> detection_engine.py -> bike_health_detector.py (v3.0) -> PostgreSQL 中的 FaultReport。
+- **独立模式**：后端启动时无需 PostgreSQL/Redis。/api/detection/dashboard 和 /api/detection/process 可独立工作。process 接口直接使用 app.services.detection_engine，不经过 DB 层。
+- **data/run_detection.py**：在本地传感器数据上运行全量检测（F1/F2/F3 + 综合评分），无需任何服务器基础设施。结果保存到 data/detection_result.json。
+- **仪表板**：通过 Jinja2 Environment + ECharts 在 /api/detection/dashboard 提供服务。模板目录为 app/templates（相对于 backend/）。
+- **评分**：三个子分数（0-100）通过加权调和平均 + 最小值惩罚因子（"木桶效应"）合成。
+- **认证**：基于 JWT。首次启动时使用设备 ID 自动注册。
 
-## Known Issues
+## 已知问题
 
-- **File encoding**: Source .py files must be UTF-8 without BOM. Some files were originally saved as UTF-16LE (causes "null bytes" SyntaxError). Use git show HEAD:<file> to restore originals if encoding issues arise.
-- **Network-dependent builds**: Docker builds require internet for pip install; corporate firewalls may block PyPI. Use python -m uvicorn (local) and python data/run_detection.py as alternatives.
-- **Dashboard template path**: When running uvicorn from ackend/, the template directory must be pp/templates (relative path, not ackend/app/templates).
+- **文件编码**：源 .py 文件必须为 UTF-8 无 BOM。部分文件最初保存为 UTF-16LE（导致 "null bytes" SyntaxError）。出现编码问题时，使用 `git show HEAD:<file>` 恢复原始文件。
+- **网络依赖构建**：Docker 构建需要网络进行 pip install；企业防火墙可能阻止 PyPI。可使用 `python -m uvicorn`（本地）和 `python data/run_detection.py` 作为替代方案。
+- **仪表板模板路径**：从 backend/ 目录运行 uvicorn 时，模板目录必须为 app/templates（相对路径，不是 backend/app/templates）。
 
-## Security & Configuration
+## 安全与配置
 
-- Copy .env.example to .env for local overrides (defaults work for Docker).
-- SECRET_KEY must be changed before production deployment.
-- API endpoints require Bearer token except /api/health, /api/auth/*, /api/detection/dashboard, and /api/detection/process.
-- Never commit .env or credentials.
+- 将 .env.example 复制为 .env 进行本地覆盖（默认值适用于 Docker）。
+- 部署到生产环境前必须更改 SECRET_KEY。
+- API 接口需要 Bearer 令牌，以下接口除外：/api/health、/api/auth/*、/api/detection/dashboard、/api/detection/process。
+- 切勿提交 .env 或凭据。
