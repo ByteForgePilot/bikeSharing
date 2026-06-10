@@ -1,13 +1,13 @@
 {
   "health": {
-    "total_score": 4.49,
-    "harmonic_mean": 33.25,
-    "penalty_factor": 0.1349,
+    "total_score": 27.41,
+    "harmonic_mean": 52.76,
+    "penalty_factor": 0.5195,
     "level": "bad",
     "recommendation": "建议换车",
     "sub_scores": {
       "tire_wobble": 82.69,
-      "chain_noise": 13.49,
+      "chain_noise": 26.99,
       "handlebar_misalignment": 100.0
     },
     "details": {
@@ -20,7 +20,7 @@
         "flat_fraction": 0.393
       },
       "F2_chain_noise": {
-        "score": 13.49,
+        "score": 26.99,
         "prediction": "异响",
         "confidence": 0.7301,
         "pedal_snr_db": 6.68,
@@ -47,7 +47,7 @@
     "flat_fraction": 0.393
   },
   "f2": {
-    "score": 13.49,
+    "score": 26.99,
     "prediction": "异响",
     "confidence": 0.7301,
     "pedal_snr_db": 6.68,

@@ -778,7 +778,7 @@ def detect_chain_noise(
     elif prediction == "正常":
         score = 50.0 + (confidence - 0.5) / 0.3 * 30.0
     else:
-        score = (1.0 - confidence) * 50.0
+        score = 100.0 * (1.0 - confidence)
 
     return {
         "score": round(float(score), 2),
@@ -938,7 +938,7 @@ def compute_health_score(
     H = 1.0 / (0.4 / f1_safe + 0.3 / f2_safe + 0.3 / f3_safe)
 
     # 最小值惩罚
-    penalty = min(s1, s2, s3) / 100.0
+    penalty = (min(s1, s2, s3) / 100.0) ** 0.5
 
     # 最终评分
     S = H * penalty
