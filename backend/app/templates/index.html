@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>共享单车健康快速检测系统</title>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="/static/echarts.min.js"></script>
 <style>
   :root {
     --bg: #0f1923; --card: #1a2736; --border: #2a3a4a; --text: #c8d6e5;
@@ -500,14 +500,20 @@ window.__BIKE_RESULT__ = {
   f3_charts: {}
 };
 
-window.addEventListener('DOMContentLoaded', function() {
+// Preload detection results after DOM + echarts loaded
+document.addEventListener('DOMContentLoaded', function preload() {
+  if (typeof echarts === 'undefined') {
+    setTimeout(preload, 500);
+    return;
+  }
   try {
     initCharts();
     renderResults(window.__BIKE_RESULT__);
     document.getElementById('results').classList.add('show');
+    var uz = document.getElementById('uploadZone');
+    if (uz) uz.style.display = 'none';
   } catch(e) {
-    console.error('Preload render failed:', e);
+    console.error('Preload error:', e.message);
   }
-});
-</script>
+});</script>
 </body>
