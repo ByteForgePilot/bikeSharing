@@ -1,0 +1,93 @@
+附录 A  参考文献
+
+[1]  Randall, R. B., & Antoni, J. (2011). Rolling element bearing
+     diagnostics — A tutorial. Mechanical Systems and Signal Processing,
+     25(2), 485–520.
+     DOI: https://doi.org/10.1016/j.ymssp.2010.07.017
+
+[2]  Bogert, B. P., Healy, M. J. R., & Tukey, J. W. (1963). The
+     quefrency alanysis of time series for echoes: Cepstrum, pseudo-
+     autocovariance, cross-cepstrum and saphe cracking. In M. Rosenblatt
+     (Ed.), Proceedings of the Symposium on Time Series Analysis
+     (pp. 209–243). New York: Wiley.
+
+[3]  Eriksson, J., Girod, L., Hull, B., Newton, R., Madden, S., &
+     Balakrishnan, H. (2008). The Pothole Patrol: Using a mobile sensor
+     network for road surface monitoring. Proceedings of the 6th
+     International Conference on Mobile Systems, Applications, and
+     Services (MobiSys '08), 29–39.
+     DOI: https://doi.org/10.1145/1378600.1378605
+
+[4]  Mohan, P., Padmanabhan, V. N., & Ramjee, R. (2008). Nericell: Rich
+     monitoring of road and traffic conditions using mobile smartphones.
+     Proceedings of the 6th ACM Conference on Embedded Network Sensor
+     Systems (SenSys '08), 323–336.
+     DOI: https://doi.org/10.1145/1460412.1460444
+
+[5]  Bhoraskar, R., Vankadhara, N., Raman, B., & Kulkarni, P. (2012).
+     Wolverine: Traffic and road condition estimation using smartphone
+     sensors. Proceedings of the 4th International Conference on
+     Communication Systems and Networks (COMSNETS 2012), 1–6.
+     DOI: https://doi.org/10.1109/COMSNETS.2012.6151382
+
+[6]  Takahashi, N., Gygli, M., Pfister, B., & Van Gool, L. (2016).
+     Deep convolutional neural networks and data augmentation for
+     acoustic event detection. Proceedings of INTERSPEECH 2016,
+     2982–2986.
+     DOI: https://doi.org/10.21437/Interspeech.2016-745
+
+[7]  Oppenheim, A. V., & Schafer, R. W. (2010). Discrete-Time Signal
+     Processing (3rd ed.). Upper Saddle River, NJ: Pearson.
+     ISBN: 978-0131988422
+
+[8]  Smith, S. W. (1997). The Scientist and Engineer's Guide to Digital
+     Signal Processing. San Diego, CA: California Technical Publishing.
+     ISBN: 978-0966017632
+
+
+附录 B  项目分工
+
+B.1  Android 数据采集端
+
+  (1)  项目初始化与 Gradle 构建配置（Kotlin DSL、Compose BOM 依赖管理）
+  (2)  AndroidManifest 权限体系设计（位置、录音、存储、前台服务类型声明）
+  (3)  SensorService 前台服务架构设计与生命周期管理
+  (4)  加速度计采集器开发（SensorManager、100Hz 采样、CSV 行写入）
+  (5)  陀螺仪采集器开发（50Hz 采样、线程安全写入、SharedFlow 数据流）
+  (6)  GPS 采集器开发（GPS_PROVIDER 10Hz 主定位 + NETWORK_PROVIDER 备用）
+  (7)  音频采集器开发（AudioRecord 8kHz PCM、双文件输出、元数据时间戳）
+  (8)  合并 CSV 文件设计（稀疏列填充、synchronized 线程安全）
+  (9)  WakeLock 休眠控制与超时保护
+  (10) 文件存储路径设计（Documents 优先 + 应用私有目录回退）
+  (11) CrashScreen 全局异常捕获与崩溃恢复
+  (12) MainScreen 界面开发（Jetpack Compose + Material3 声明式 UI）
+  (13) BicycleTheme 主题设计（色彩语义分配、状态驱动配色）
+
+B.2  Python 算法端
+
+  (14) 数据加载模块（CSV 解析、PCM 解析、v2/v4 格式自动兼容）
+  (15) 自适应窗口选取算法（向量化滑动窗口评分、三维评分函数）
+  (16) F1 轮胎偏摆检测（FFT 振动分析、轮频估计、平整路面判定、线性评分）
+  (17) F2 链条异响检测（包络谱分析、Cepstrum 倒谱检测、五特征加权融合）
+  (18) F3 车头不正检测（直行段自动筛选、陀螺仪偏置估计、加速度计晃动惩罚）
+  (19) 综合健康评分机制（加权调和平均、最小值惩罚因子、分级决策规则）
+  (20) 信号处理工具函数库（带通滤波、重采样、希尔伯特包络、自相关等）
+  (21) 算法参数标定与三组数据集调优
+
+B.3  Web 可视化端
+
+  (22) FastAPI 后端框架搭建（路由注册、文件上传接口、JSON API）
+  (23) ECharts 前端仪表盘（评分仪表盘、三维雷达图、波形频谱面板）
+  (24) 独立运行模式（无需数据库、无需认证的 /api/detection/process 接口）
+  (25) 图表数据构建（波形采样、FFT 频谱、陀螺仪累计偏航角的图表 JSON）
+
+B.4  数据采集与实验
+
+  (26) 多组真实骑行数据的实地采集（不同车况、不同路面的传感器数据与音频）
+  (27) 采集数据的分类整理与标注（按车况分为良好、中等、短板三组）
+  (28) 算法输出结果的人工校验与车况对照
+
+B.5  测试与文档
+
+  (29) pytest 测试套件（detection_engine 单元测试、API 集成测试）
+  (30) 项目技术报告撰写（十三章节 + 附录）

@@ -1,0 +1,53 @@
+﻿# --- Python ---
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.env
+*.egg
+
+# --- Android (BicycleDataLogger) ---
+BicycleDataLogger/.gradle/
+BicycleDataLogger/build/
+BicycleDataLogger/app/build/
+BicycleDataLogger/local.properties
+*.apk
+*.aab
+
+# --- ML ---
+ml/data/raw/*
+ml/models/*
+*.pkl
+*.h5
+*.onnx
+*.pt
+!ml/data/raw/.gitkeep
+!ml/models/.gitkeep
+
+# --- Old Expo mobile (deprecated, pending deletion) ---
+mobile/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Docker ---
+docker-compose.override.yml
+
+# --- Environment ---
+.env
+.env.local
+.env.production

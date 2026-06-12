@@ -1,0 +1,452 @@
+================================================================
+    共享单车多传感器数据采集与健康检测系统
+
+    第四章  用户界面设计
+================================================================
+
+
+
+4.1  Jetpack Compose 声明式 UI 架构
+================================================================
+
+4.1.1  技术选型背景
+
+Android 平台的 UI 开发范式在过去十年间经历了三次重大变革：
+
+  2011–2017：命令式 View 体系。XML 布局文件 + findViewById +
+  setOnClickListener。状态与UI手动同步，易产生不一致Bug。
+
+  2017–2021：数据绑定 + MVVM。Data Binding Library + ViewModel +
+  LiveData。状态管理改善，但XML与Kotlin的双语维护成本高。
+
+  2021–至今：Jetpack Compose 声明式UI。Google官方推荐的现代UI
+  工具包。UI是状态的函数——状态变化自动触发重组(recomposition)。
+
+本项目选择 Jetpack Compose + Material3 的组合，核心理由有三：
+
+  (1) 状态驱动的实时刷新契合采集App的核心需求。计时器（每200ms
+      刷新）、传感器状态指示（开/关）、采集进度等频繁更新的UI
+      元素，在声明式框架下只需更新StateFlow的值，UI自动响应。
+
+  (2) Kotlin 单语言开发。布局、主题、交互逻辑全部在 Kotlin 中编写，
+      消除了XML↔Kotlin的上下文切换成本。项目体量小（<300行UI代码），
+      使用纯 Compose 无任何负担。
+
+  (3) Material3 组件库开箱即用。TopAppBar、Card、Button等组件已经
+      封装了符合 Material Design 3 规范的样式和交互反馈，减小了
+      自行定制的外观工作量。
+
+4.1.2  BicycleTheme 主题设计
+
+主题定义位于 [Theme.kt](BicycleDataLogger/app/src/main/java/com/bicycle/datalogger/ui/theme/Theme.kt)，
+使用 Material3 的 lightColorScheme：
+
+  ```kotlin
+  private val LightColors = lightColorScheme(
+      primary          = Color(0xFF1976D2),    // 蓝色主色调
+      onPrimary        = Color.White,          // 主色调上的文字（白）
+      primaryContainer = Color(0xFFBBDEFB),    // 浅蓝容器（状态卡片）
+      secondary        = Color(0xFF43A047),    // 绿色辅助色
+      onSecondary      = Color.White,
+      surface          = Color(0xFFFAFAFA),    // 卡片底色（近白）
+      onSurface        = Color(0xFF212121),    // 正文文字（深灰）
+      background       = Color(0xFFF5F5F5),    // 页面背景（浅灰）
+      onBackground     = Color(0xFF212121),
+      error            = Color(0xFFD32F2F),    // 红色（暂停按钮、错误状态）
+  )
+  ```
+
+  色彩语义分配原则：
+
+    primary（蓝）→ 品牌色，AppBar、开始按钮、进行中状态指示
+    secondary（绿）→ 辅助色，保存路径卡片背景
+    error（红）→ 暂停按钮、错误状态卡片、崩溃信息标题
+    surface/background（浅灰系）→ 卡片和页面底色，营造轻量感
+
+  BicycleTheme Composable 函数将 LightColors 注入 MaterialTheme：
+
+  ```kotlin
+  @Composable
+  fun BicycleTheme(content: @Composable () -> Unit) {
+      MaterialTheme(
+          colorScheme = LightColors,
+          content = content
+      )
+  }
+  ```
+
+  仅使用了 lightColorScheme，未提供 darkColorScheme。这是因为巡检
+  通常在白天户外使用手机，深色主题在强光下的可读性远不如浅色主题。
+  同时保持单一主题降低了维护负担——无需为深色模式逐一调试验证
+  每个组件的色彩对比度。
+
+4.1.3  状态管理架构
+
+采集App的特殊性在于"UI层与Service层分属不同进程生命周期"。
+MainActivity 可能被销毁重建（屏幕旋转、系统回收内存），而
+SensorService 在后台持续运行。因此状态不能存储在 Activity 实例中，
+必须使用全局可访问的状态容器。
+
+本项目采用 Companion Object + StateFlow 的方案：
+
+  ```kotlin
+  class SensorService : Service() {
+      companion object {
+          private val _sessionState = MutableStateFlow<SessionState>(
+              SessionState.Idle)
+          val sessionState: StateFlow<SessionState> = _sessionState
+
+          val isRunning   = MutableStateFlow(false)
+          val elapsedMs   = MutableStateFlow(0L)
+          val sessionPath = MutableStateFlow("")
+          val debugLog    = MutableStateFlow("")
+      }
+  }
+  ```
+
+  选型分析：
+    · Companion Object（Kotlin的静态成员）保证全局唯一实例。
+    · StateFlow（而非LiveData）与Jetpack Compose的collectAsState()
+      天然集成，无需额外引入LiveData→State转换。
+    · MutableStateFlow 的初始值在类加载时确定，不依赖Service实例
+      是否正在运行。即使Service已被系统杀死，UI仍能读取最新的
+      状态值（虽然此时isRunning可能与实际不一致——这正是需要
+      START_STICKY和CrashScreen来处理的场景）。
+
+  UI层通过 collectAsState() 订阅：
+
+  ```kotlin
+  val running by isRunning.collectAsState()
+  val state   by sessionState.collectAsState()
+  val elapsed by elapsedMs.collectAsState()
+  val path    by sessionPath.collectAsState()
+  ```
+
+  by 委托 + collectAsState() 的组合将 StateFlow 转换为 Compose 可观察
+  的 State 对象，当Flow中有新值发出时自动触发重组。
+
+
+
+4.2  主界面布局（MainScreen）
+================================================================
+
+MainScreen 是整个App唯一的用户界面（CrashScreen仅异常时显示）。
+其布局结构如图4-1所示：
+
+  ┌──────────────────────────────┐
+  │  TopAppBar                   │
+  │  "自行车数据采集"              │  ← 蓝色背景 + 白色标题
+  ├──────────────────────────────┤
+  │                              │
+  │  ┌──────────────────────────┐│
+  │  │ 状态卡片                  ││  ← 颜色随状态变化
+  │  │                          ││
+  │  │  "就绪" / "正在采集..."    ││     Idle→surface色
+  │  │  "已采集: 03分25秒"       ││     Collecting→蓝色容器
+  │  │                          ││     Error→红色容器
+  │  └──────────────────────────┘│
+  │                              │
+  │  ┌──────────────────────────┐│
+  │  │  [ 再次开始 / 暂停采集 ]   ││  ← 满宽大按钮，64dp高
+  │  │                          ││     运行中=红色，停止中=蓝色
+  │  └──────────────────────────┘│
+  │                              │
+  │  ┌──────────────────────────┐│
+  │  │ 传感器状态                ││
+  │  │ 加速度计  100Hz  三轴  开 ││
+  │  │ GPS      10Hz   速度  开  ││
+  │  │ 陀螺仪    50Hz   偏航  开 ││
+  │  │ 麦克风    8kHz   PCM  开  ││
+  │  └──────────────────────────┘│
+  │                              │
+  │  ┌──────────────────────────┐│
+  │  │ 数据输出                  ││
+  │  │ 合并数据  传感器数据.txt   ││
+  │  │ 音频      音频.pcm + csv  ││
+  │  │ 时间戳    纳秒级          ││
+  │  └──────────────────────────┘│
+  │                              │
+  │  ┌──────────────────────────┐│
+  │  │ 保存位置 (仅采集后有值)     ││  ← 绿色卡片
+  │  │ /Documents/自行车数据/...  ││
+  │  └──────────────────────────┘│
+  │                              │
+  │  ┌──────────────────────────┐│
+  │  │ 调试信息 (仅开发阶段)      ││  ← 浅灰卡片
+  │  │ [12345] 采集已启动...     ││
+  │  └──────────────────────────┘│
+  └──────────────────────────────┘
+
+  图4-1  MainScreen 布局结构
+
+4.2.1  TopAppBar
+
+  ```kotlin
+  TopAppBar(
+      title = { Text("自行车数据采集") },
+      colors = TopAppBarDefaults.topAppBarColors(
+          containerColor = MaterialTheme.colorScheme.primary,    // 蓝
+          titleContentColor = MaterialTheme.colorScheme.onPrimary // 白
+      )
+  )
+  ```
+
+  使用 Material3 的 TopAppBar 组件。标题「自行车数据采集」直观告诉
+  用户App的用途。蓝色+白色的高对比度组合确保户外强光下的可读性。
+
+4.2.2  状态卡片
+
+  状态卡片是信息层级中的最重要元素——用户第一眼需要知道"现在在
+  干什么"。卡片的背景色随 SessionState 动态切换：
+
+  ```kotlin
+  Card(
+      colors = CardDefaults.cardColors(
+          containerColor = when (state) {
+              is SessionState.Idle       -> surface         // 浅灰白
+              is SessionState.Collecting -> primaryContainer // 浅蓝
+              is SessionState.Error      -> errorContainer   // 浅红
+          }
+      )
+  )
+  ```
+
+  文字内容同样跟随状态：
+    Idle       → "就绪"
+    Collecting → "正在采集..."
+    Error(msg) → "错误: ${msg}"
+
+  当 isRunning 为 true 时，卡片内额外展示实时计时器：
+    格式：hh时mm分ss秒（时分秒自适应省略零值高位）
+    字号：24sp，加粗，蓝色
+    刷新间隔：200ms（由SensorService的timerJob驱动）
+
+4.2.3  主控制按钮
+
+  全宽（fillMaxWidth）、高64dp的大按钮，是整个界面的操作核心：
+
+  ```kotlin
+  Button(
+      onClick = { if (running) onStop() else onStart() },
+      colors = ButtonDefaults.buttonColors(
+          containerColor = if (running)
+              MaterialTheme.colorScheme.error   // 红色 — "危险操作"
+          else
+              MaterialTheme.colorScheme.primary // 蓝色 — "安全操作"
+      )
+  ) {
+      Text(
+          text = if (running) "暂停采集" else "再次开始",
+          fontSize = 22.sp,
+          fontWeight = FontWeight.Bold
+      )
+  }
+  ```
+
+  设计意图：
+    · 按钮文本使用动词句式（"暂停采集"/"再次开始"）明确告知用户
+      点击后的动作，而非模糊的"确定"。
+    · 运行中按钮为红色——利用颜色的危险语义暗示用户"这是一个中断
+      操作，点击后数据采集将停止"。
+    · 22sp加粗字体在户外步行操作时保证足够的触控识别面积和文字
+      可读性。64dp的高度远大于Android推荐的48dp最小触控目标。
+
+4.2.4  传感器状态面板
+
+  四行等宽的传感器信息行，每行结构为：
+    ┌────────────┬────────┬──────────────┬────┐
+    │ 传感器名称   │ 采样率  │ 详细说明      │ 状态│
+    ├────────────┼────────┼──────────────┼────┤
+    │ 加速度计    │ 100 Hz │ 三轴(Z=垂直)  │ 开 │
+    │ GPS        │ 10 Hz  │ 速度+航向角   │ 开 │
+    │ 陀螺仪      │ 50 Hz  │ 偏航角速度    │ 开 │
+    │ 麦克风      │ 8 kHz  │ 16-bit PCM   │ 开 │
+    └────────────┴────────┴──────────────┴────┘
+
+  状态列的视觉设计：
+    · 运行中：蓝色透明背景 + 蓝色"开"字——暖色系暗示"工作中"
+    · 未运行：灰色背景 + "—"符号——中性色暗示"待命中"
+
+  这一面板的存在价值是：在户外环境下，巡检人员可以将屏幕展示给
+  同事或管理者，一目了然地证明"四种传感器确实都在采集"，增强
+  工具的可信度。
+
+4.2.5  数据输出说明卡片
+
+  静态展示三个输出文件的信息，帮助用户理解"App保存了什么"：
+
+    合并数据  →  传感器数据.txt  (加速度计+GPS+陀螺仪)
+    音频      →  音频.pcm + 音频_时间戳.csv
+    时间戳    →  纳秒级 (SystemClock.elapsedRealtimeNanos)
+
+  虽然是纯静态内容，但它承担了一个重要的产品功能——让用户建立
+  对采集过程的认知模型。没有这个卡片，用户看到手机屏幕上只有一个
+  计时器和按钮，可能会疑惑"它到底在干什么？数据去哪了？"
+
+4.2.6  保存路径卡片
+
+  仅在采集结束后（sessionPath非空）显示：
+
+  ```kotlin
+  if (path.isNotEmpty()) {
+      Card(containerColor = secondaryContainer) {  // 浅绿色背景
+          Text("保存位置")
+          Text(path, fontSize = 12.sp)
+      }
+  }
+  ```
+
+  显示完整的文件夹路径，巡检人员据此定位并导出数据。绿色背景
+  暗示"数据已安全保存"。
+
+4.2.7  调试信息卡片
+
+  仅在开发和测试阶段使用，受 debugLog 控制。debugLog 中记录了
+  Service 生命周期中的关键事件：
+
+    "[12345] onStartCommand(action=START)"
+    "[12345] startCollection() 进入, isRunning=false"
+    "[12345] 采集已启动, isRunning=true"
+    "[12345] pauseCollection() 收到暂停请求"
+    "[12345] cleanupSession() 完成, 数据: /Documents/..."
+
+  12sp 等宽小字（Compose默认字体对数字和英文文本已是等宽），
+  适合开发者在调试时追踪Service行为。正式发布版本中可通过
+  移除 debugLog 的 UI 展示来隐藏。
+
+
+
+4.3  交互流程
+================================================================
+
+4.3.1  正常采集流程
+
+  用户打开App
+      │
+      ▼
+  ┌──────────────┐    若有崩溃日志
+  │ 检查崩溃日志   │────────────────→ CrashScreen → 用户关闭 → 返回
+  └──────┬───────┘
+         │ 无
+         ▼
+  MainScreen (isRunning=false, state=Idle)
+      │
+      │  用户点击「再次开始」
+      ▼
+  onStartClick()
+      │
+      ├── 检查是否已在采集中（防重入）
+      │
+      ├── 检查权限状态
+      │   ├── 关键权限(位置+录音)缺失 → 弹出权限请求 → (同意→继续 / 拒绝→Toast提示)
+      │   └── 权限齐全 → 继续
+      │
+      ├── 检查存储权限(Android 11+)
+      │   ├── 未授权 → 跳转系统设置页 → 用户授权后返回
+      │   └── 已授权 → 继续
+      │
+      └── startCollection()
+            │
+            ├── startForegroundService(ACTION_START)
+            │
+            └── SensorService 启动
+                  │
+                  ├── WakeLock获取
+                  ├── 通知更新
+                  ├── 创建文件夹和文件
+                  ├── 启动4个采集协程
+                  └── 启动计时器
+
+  图4-2  正常采集启动流程
+
+  运行时状态：
+    · UI：状态卡片显示"正在采集..." + 蓝色背景 + 实时计时器
+    · 按钮：红色"暂停采集"
+    · 传感器面板：全部四行显示"开"
+    · 通知栏：持续显示"自行车数据采集 — 正在采集传感器数据..."
+
+4.3.2  暂停流程
+
+  用户点击「暂停采集」
+      │
+      ▼
+  onStopClick()
+      │
+      └── startService(ACTION_STOP)
+            │
+            └── SensorService.onStartCommand(ACTION_STOP)
+                  │
+                  └── pauseCollection()
+                        │
+                        ├── collectionJob?.cancel()  → 触发各协程CancellationException
+                        │     │
+                        │     ├── AccelCollector.stop()
+                        │     ├── GpsCollector.stop()
+                        │     ├── GyroCollector.stop()
+                        │     └── AudioCollector.stop()
+                        │
+                        ├── timerJob?.cancel()
+                        │
+                        └── cleanupSession()
+                              │
+                              ├── combinedWriter.flush() + close()  → 数据落盘
+                              ├── metaWriter.flush() + close()
+                              ├── WakeLock释放
+                              ├── isRunning = false
+                              ├── sessionState = Idle
+                              └── 通知更新为"就绪"
+
+  图4-3  暂停流程
+
+  暂停后状态恢复：
+    · UI：状态卡片恢复"就绪" + 浅灰白色背景
+    · 按钮：恢复蓝色"再次开始"
+    · 传感器面板：全部四行恢复"—"
+    · 保存路径卡片：出现，显示本次数据文件夹路径
+
+4.3.3  异常流程
+
+  场景一：系统杀死Service
+    安卓系统在内存压力大时可能杀死前台服务。onDestroy()会被调用，
+    执行完整的资源清理。START_STICKY导致系统稍后重启Service，
+    但Intent为null，Service停留在就绪状态而不自动恢复采集。
+    用户体验：UI中的isRunning状态与Service实际状态可能出现短暂
+    不一致（StateFlow的旧值残留在内存中）。下次点击按钮时，
+    isRunning检查会发现不匹配并纠正。
+
+  场景二：应用崩溃
+    DefaultUncaughtExceptionHandler捕获异常 → 写入SharedPreferences
+    → killProcess。下次启动时CrashScreen展示完整堆栈，用户截图
+    反馈给开发者。
+
+  场景三：权限在运行中被撤销
+    用户在系统设置中关闭了位置或麦克风权限。下一次onStartClick()
+    中的权限检查会捕获此变化，重新弹出授权请求。
+
+  场景四：存储空间不足
+    FileWriter.write()不会抛出IOException（缓冲区在内存中）。
+    异常会在flush()或close()时暴露——cleanupSession()中的
+    try-catch捕获后记录日志，至少已缓冲在内存的数据不会丢失。
+
+
+4.4  本章小结
+================================================================
+
+本章阐述了Android采集端用户界面的设计。核心设计原则可以归纳为
+三点：
+
+  (1) 极简主义：一个主界面覆盖所有功能。没有设置页面、没有历史
+      记录列表、没有图表预览——这些在采集场景下都是干扰。巡检人员
+      骑行中的注意力应在路况而非手机屏幕。
+
+  (2) 色彩语义化：主按钮的颜色（蓝=开始, 红=暂停）和状态卡片的
+      颜色（灰=空闲, 蓝=采集中, 红=错误）直接传达当前状态，无需
+      阅读文字即可感知。这对户外低注意力场景尤其重要。
+
+  (3) 状态驱动架构：Companion Object + StateFlow + collectAsState
+      的组合，让Service的状态变化自动渲染到UI，消除了手动同步的
+      错误可能。每200ms的计时器刷新是UI层唯一的主动轮询机制。
+
+================================================================
+                       第四章完
+================================================================

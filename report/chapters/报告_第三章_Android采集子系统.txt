@@ -1,0 +1,749 @@
+================================================================
+    共享单车多传感器数据采集与健康检测系统
+
+    第三章  Android多传感器数据采集子系统
+================================================================
+
+3.1  系统需求分析
+================================================================
+
+3.1.1  功能需求
+
+Android采集端是整个系统的数据源头。其功能需求可归纳为以下四类：
+
+  FR1 — 多传感器同步采集
+        同时启动加速度计、陀螺仪、GPS定位和麦克风四路传感器，各自
+        以独立的采样率和数据格式持续记录。各路传感器的时间戳必须
+        基于同一时钟源以保证后续跨传感器的时间对齐。
+
+  FR2 — 长时间后台保活
+        巡检人员扫码开锁后启动采集，整个骑行过程中（5~30分钟不等）
+        应持续记录，即使屏幕关闭或切换到其他App也不中断。Android
+        系统对后台进程有严格的资源管控，必须使用前台服务机制。
+
+  FR3 — 数据持久化与导出
+        采集数据实时写入设备文件系统，每次骑行会话生成一个独立文件
+        夹。采集结束后巡检人员可通过USB连接将数据导出到PC。
+
+  FR4 — 异常恢复
+        App崩溃或系统杀死进程时，尽可能保留已采集的数据不丢失。
+        下次启动时展示崩溃信息，辅助远程诊断。
+
+3.1.2  非功能需求
+
+  NFR1 — 数据完整性
+         传感器数据不得因缓冲区溢出或IO阻塞而丢失。在典型的15分钟
+         骑行场景下（约90,000条加速度计+45,000条陀螺仪+9,000条GPS
+         +7,200,000音频采样点）应无丢帧。
+
+  NFR2 — 低存储开销
+         在不影响数据保真度的前提下控制文件体积。文本格式本身已有
+         膨胀，不再额外压缩。预期15分钟采集数据量约50~200 MB。
+
+  NFR3 — 低功耗
+         屏幕关闭后CPU需保持运行（Partial WakeLock），但不应阻止
+         SoC进入低功耗态。避免GPS高频轮询和无意义的唤醒。
+
+  NFR4 — 跨设备兼容
+         兼容Android 8.0 (API 26) 至Android 14 (API 34)，覆盖
+         >95%的现役安卓设备。不同OEM的传感器硬件差异不应导致
+         功能异常。
+
+3.1.3  核心挑战分析
+
+在Android平台上实现长时间的传感器数据采集面临四个核心挑战：
+
+  挑战一：Android后台限制。
+          Android 8.0引入了后台服务限制，应用进入后台后几分钟内
+          就会被系统杀死。即使是前台服务，Android 12+也会在特定
+          条件下（如电池优化）强制终止。解决方案：前台服务
+          + START_STICKY + WakeLock + 电池优化白名单引导。
+
+  挑战二：传感器采样率不可靠。
+          Android SensorManager 的采样延迟参数是"建议值"而非
+          "保证值"。不同设备、不同固件版本、甚至不同电池电量下，
+          实际采样间隔可能大幅波动。解决方案：使用
+          SystemClock.elapsedRealtimeNanos()记录实际到达时间，
+          不依赖采样间隔的均匀性假设。
+
+  挑战三：IO与传感器回调的线程竞争。
+          传感器回调运行在主线程（默认）或专用线程上，而文件写入
+          是阻塞操作。若在回调中同步写入文件，高频传感器（100Hz
+          加速度计）的回调会被IO阻塞拖慢，造成数据丢失。解决方案：
+          使用synchronized锁保护Writer，写入内容仅为简短的字符串
+          拼接，IO缓冲由FileWriter的默认Buffer承担。
+
+  挑战四：GPS可用性不稳定。
+          城市环境中GPS信号频繁中断，且冷启动首次定位可能耗时
+          30秒以上。解决方案：双源定位策略——GPS为主（10Hz），
+          网络定位为备用（5s间隔）。GPS不可用时速度/航向字段留空，
+          不阻塞其他传感器的采集。
+
+
+
+3.2  权限体系设计
+================================================================
+
+3.2.1  权限分类
+
+本App申请的权限按功能重要程度分为两类：
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ 关键权限（采集核心功能依赖，缺失则无法工作）              │
+  │                                                         │
+  │ · ACCESS_FINE_LOCATION  — GPS精确定位，提供速度和航向    │
+  │ · RECORD_AUDIO          — 麦克风录音，采集链条声音       │
+  └─────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ 辅助权限（增强体验或满足系统要求，缺失可降级运行）        │
+  │                                                         │
+  │ · ACCESS_COARSE_LOCATION    — 网络定位备用              │
+  │ · POST_NOTIFICATIONS        — Android 13+ 通知权限      │
+  │ · FOREGROUND_SERVICE        — 前台服务声明               │
+  │ · FOREGROUND_SERVICE_LOCATION    — Android 14+ 位置类型   │
+  │ · FOREGROUND_SERVICE_MICROPHONE  — Android 14+ 麦克风类型 │
+  │ · FOREGROUND_SERVICE_SENSORS     — Android 14+ 传感器类型 │
+  │ · WAKE_LOCK                 — CPU休眠控制                │
+  │ · WRITE_EXTERNAL_STORAGE    — Android 9及以下存储写入    │
+  │ · MANAGE_EXTERNAL_STORAGE   — Android 11+ 全局文件访问   │
+  └─────────────────────────────────────────────────────────┘
+
+3.2.2  权限申请流程
+
+权限申请并非在App启动时一次性全部弹出，而是遵循"渐进式请求"原则：
+仅在用户点击「开始采集」时才开始申请，且按关键权限→存储权限的顺序
+分步进行。具体流程如图3-1所示。
+
+  用户点击「开始采集」
+        │
+        ▼
+  ┌─────────────┐   已全部授予   ┌──────────────┐
+  │ 检查关键权限  │──────────────→│ 检查存储权限   │
+  │ (位置+录音)   │               │ (MANAGE_STORAGE│
+  └──────┬──────┘               │  on Android11+)│
+         │ 有缺失                └──────┬───────┘
+         ▼                              │
+  ┌─────────────┐    用户同意    ┌──────▼───────┐
+  │ 弹出权限请求  │──────────────→│ 检查存储权限   │
+  │ 对话框        │               │               │
+  └──────┬──────┘               └──────────────┘
+         │ 用户拒绝                     │
+         ▼                              │ 全部就绪
+  ┌─────────────┐               ┌──────▼───────┐
+  │ Toast提示:   │               │ 启动前台服务   │
+  │ 位置和麦克风  │               │ 开始采集       │
+  │ 权限是必需的  │               └──────────────┘
+  └──────────────┘
+
+  图3-1  权限申请流程图
+
+关键设计点：
+
+  (1) 关键权限被拒绝时不强制退出，而是通过Toast提示用户「位置和
+      麦克风权限是采集数据所必需的」，引导用户进入系统设置页面手动
+      授权。在某些Android版本中重复弹窗被系统禁止后，这是唯一途径。
+
+  (2) 存储权限使用Android 11+的 MANAGE_EXTERNAL_STORAGE 机制。
+      系统会打开一个全屏设置页面要求用户授权"所有文件访问权限"。
+      若用户拒绝或系统不支持，自动回退到应用私有目录
+      (getExternalFilesDir)，不阻塞采集流程。
+
+  (3) 权限申请使用Activity Result API（registerForActivityResult）
+      而非已废弃的 onRequestPermissionsResult，与Jetpack Compose
+      的现代生命周期模型兼容。
+
+3.2.3  硬件特性声明
+
+AndroidManifest.xml 中使用 <uses-feature> 标签声明了必需的硬件特性，
+Google Play会据此过滤不兼容设备：
+
+  · android.hardware.sensor.accelerometer — 加速度计（必需）
+  · android.hardware.sensor.gyroscope       — 陀螺仪（必需）
+  · android.hardware.location.gps            — GPS（必需）
+  · android.hardware.microphone              — 麦克风（必需）
+
+四个特性均设为 required="true"，意味着缺少任一硬件的设备将无法
+从Google Play安装本App。
+
+
+
+3.3  前台服务架构（SensorService）
+================================================================
+
+前台服务是整个采集子系统的核心调度器，负责协调各传感器的启动/停止、
+数据的统一写入，以及采集会话的生命周期管理。
+
+3.3.1  为什么必须使用前台服务
+
+Android系统对后台进程的管控有三个关键节点：
+
+  Android 8.0 (API 26)：后台应用的后台服务限制。应用进入后台后数
+  分钟内，系统将调用 stopService() 终止其后台服务。唯一的例外是
+  前台服务（startForegroundService），它必须绑定一个持续显示的通知，
+  以此向用户明示"此应用正在后台运行"。
+
+  Android 12 (API 31)：前台服务启动限制。应用从后台启动前台服务被
+  禁止（除非属于豁免类别）。本App在MainActivity中响应用户点击启动
+  前台服务，属于前台→服务的前台启动，不受此限制。
+
+  Android 14 (API 34)：前台服务类型强制声明。必须在
+  AndroidManifest.xml 的 <service> 标签中声明 foregroundServiceType，
+  并与运行时 startForeground() 参数匹配。本项目声明了 location 和
+  microphone 两种类型。
+
+综上所述，前台服务是Android 8.0以上实现长时间后台采集的唯一合法
+途径。任何试图绕过此限制的做法（如使用JobScheduler、WorkManager等
+定时唤醒机制）都无法满足100Hz加速度计的实时采集需求。
+
+3.3.2  SensorService 生命周期
+
+SensorService 继承自 android.app.Service，其生命周期完全由系统管理：
+
+  ┌─────────────────────────────────────────────────────────┐
+  │                    SensorService 生命周期                 │
+  │                                                         │
+  │  onCreate()                                              │
+  │  ├── createNotificationChannel()  — 创建通知渠道（一次性）│
+  │  ├── AccelCollector(this)          — 初始化加速度计       │
+  │  ├── GpsCollector(this)             — 初始化GPS           │
+  │  ├── GyroCollector(this)            — 初始化陀螺仪         │
+  │  ├── AudioCollector()              — 初始化麦克风         │
+  │  └── startForeground(ID, 通知)     — 进入前台             │
+  │       │                                                 │
+  │  onStartCommand(Intent)                                  │
+  │  ├── ACTION_START → startCollection()                    │
+  │  └── ACTION_STOP  → pauseCollection()                    │
+  │       │  return START_STICKY                             │
+  │       │                                                 │
+  │  onDestroy()                                             │
+  │  ├── 取消所有协程                                         │
+  │  ├── 停止所有传感器                                       │
+  │  ├── 关闭文件Writer                                      │
+  │  ├── 释放WakeLock                                        │
+  │  └── super.onDestroy()                                   │
+  └─────────────────────────────────────────────────────────┘
+
+  图3-2  SensorService 生命周期示意图
+
+关键设计细节：
+
+  (1) onCreate 只做一次性初始化。传感器采集器实例在此创建，
+      startForeground()在此调用使服务进入前台。整个服务的生命周期
+      内，onCreate不会重复执行。
+
+  (2) onStartCommand 处理采集指令。ACTION_START和ACTION_STOP通过
+      Intent Action传递。返回值START_STICKY表示服务被系统杀死后将
+      自动重启（但Intent为null，需根据当前状态自行恢复）。
+
+  (3) onDestroy 执行资源清理。无论采集是正常结束还是被系统终止，
+      onDestroy是最后的安全屏障——必须在此关闭文件Writer以防止数据
+      损坏，释放WakeLock以避免持续耗电。
+
+3.3.3  采集启动流程（startCollection）
+
+当收到 ACTION_START 指令时，执行以下步骤：
+
+  Step 1 — 防重入检查
+          若 isRunning==true，忽略重复启动请求。防止用户快速双击
+          「开始」按钮造成多路并行采集。
+
+  Step 2 — 获取WakeLock
+          调用 PowerManager.newWakeLock(PARTIAL_WAKE_LOCK) 获取
+          CPU唤醒锁，超时时间设为10分钟。此锁确保在屏幕关闭后CPU
+          不会进入深度休眠。
+
+  Step 3 — 状态更新
+          isRunning = true
+          sessionState = SessionState.Collecting
+          elapsedMs = 0L
+          通知更新为"正在采集传感器数据..."
+
+  Step 4 — 创建会话文件夹
+          以当前时间戳命名：yyyyMMdd_HHmmss 格式。
+          路径：Documents/自行车数据/20250610_143025/
+
+  Step 5 — 创建数据文件
+          在会话文件夹中创建 传感器数据.txt，写入CSV表头。
+
+  Step 6 — 启动四个采集协程
+          在 serviceScope（Dispatchers.IO + SupervisorJob）中并行
+          启动四个协程，分别负责加速度计、陀螺仪、GPS和音频的
+          采集循环。每个协程向其对应的Collector发送start指令，
+          然后挂起等待取消信号。
+
+  Step 7 — 启动计时器
+          每200ms更新一次 elapsedMs 状态，驱动前端的实时计时显示。
+
+3.3.4  采集暂停流程（pauseCollection）
+
+暂停操作的设计意图是"优雅停止"而非"强制杀死"。通过取消协程来触发
+各采集循环中的 CancellationException，使每个Collector有机会在退出
+前完成缓冲区写入：
+
+  Step 1 — collectionJob?.cancel()
+          取消主采集协程。由于使用了 SupervisorJob，子协程不会
+          立即被终止，而是收到 CancellationException 后自行清理。
+
+  Step 2 — timerJob?.cancel()
+          停止计时器。
+
+  Step 3 — cleanupSession()
+          在每个协程的 finally 块中执行。关闭文件Writer（flush后
+          close），停止传感器监听，释放WakeLock，恢复状态为Idle。
+
+3.3.5  CoroutineScope 设计
+
+  val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+选型分析：
+
+  Dispatchers.IO：传感器数据的文件写入是IO密集型操作，使用IO调度器
+  可利用其线程池的弹性扩缩。
+
+  SupervisorJob：子协程的失败不会传播到父协程，也不会取消其他兄弟
+  协程。例如，GPS协程因权限问题异常终止不应导致加速度计协程也被取消。
+
+
+
+3.4  多传感器采集器详细设计
+================================================================
+
+本节逐一剖析四个传感器采集器的实现细节。四个采集器遵循统一的
+设计模式：start(Writer) → 持续回调写入 → stop()。
+
+3.4.1  加速度计采集器（AccelCollector）
+
+  —— 硬件配置 ——
+
+  SensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+  注册参数：registerListener(this, accel, 10000)
+  · 传感器类型：三轴MEMS加速度计（电容式或压阻式）
+  · 量程：通常 ±16g（约 ±157 m/s²）
+  · 采样率：SENSOR_DELAY_GAME（10000μs = 100Hz）
+  · 输出坐标系：设备坐标系（X=宽边, Y=长边, Z=垂直屏幕向上）
+
+  选100Hz的理由：
+  · 车轮振动信息集中在40Hz以下，100Hz满足奈奎斯特定理（最高分析
+    频率50Hz）。
+  · SENSOR_DELAY_FASTEST（名义最快，实测在不同设备上波动剧烈——
+    有的200Hz，有的500Hz，有的仅60Hz）的跨设备一致性远不如
+    SENSOR_DELAY_GAME。
+  · 100Hz × 15分钟 = 90,000条记录，数据量适中。
+
+  —— 数据写入 ——
+
+  传感器回调 onSensorChanged(event) 在系统传感器线程上被调用（不在
+  主线程）。每次回调的执行路径如下：
+
+    onSensorChanged(event)
+      │
+      ├── 类型校验：if (event.sensor.type != TYPE_ACCELEROMETER) return
+      │
+      ├── 数据封装：AccelData(timestampNs, ax, ay, az)
+      │      其中 timestampNs = event.timestamp（经系统单调时钟校准）
+      │
+      ├── 写入文件（synchronized块）：
+      │      writer.write("${ts},加速度计,${ax},${ay},${az},,,,,,,\n")
+      │
+      └── Flow发射：尝试tryEmit到SharedFlow（非阻塞）
+
+  关于时间戳的重要说明：event.timestamp 的值并非
+  System.currentTimeMillis()，而是基于系统启动时间的纳秒级单调时钟
+  （与 SystemClock.elapsedRealtimeNanos() 同一时钟源）。这意味着
+  它不受网络时间同步或用户修改系统时间的影响，保证了传感器数据之间
+  的时间戳一致性。
+
+  —— 共享数据流 ——
+
+  AccelData 同时通过 SharedFlow 发射，供未来可能的实时分析模块订阅。
+  SharedFlow配置：
+    · replay = 0（新订阅者不收到历史数据）
+    · extraBufferCapacity = 500（约5秒的缓冲）
+    · onBufferOverflow = DROP_OLDEST（缓冲区满时丢弃最旧的数据）
+
+3.4.2  陀螺仪采集器（GyroCollector）
+
+  —— 硬件配置 ——
+
+  SensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+  注册参数：registerListener(this, gyro, 20000)
+  · 传感器类型：三轴MEMS陀螺仪（科里奥利力原理）
+  · 量程：通常 ±2000°/s（约 ±35 rad/s）
+  · 采样率：20000μs = 50Hz
+
+  选50Hz的理由：
+  · 车把的偏航角变化在骑行中是缓慢的（正常转弯时 <10°/s）。
+  · 需要检测的是长时间尺度的固定偏置（2秒观测窗口），而非瞬时
+    角速度的精确值。50Hz对偏置估计已足够。
+  · 与加速度计的100Hz形成2:1的比例关系，在时间对齐时便于处理。
+
+  —— 数据写入 ——
+
+  写入格式：
+    "${timestampNs},陀螺仪,,,,,,,,${gx},${gy},${gz}\n"
+
+  注意CSV列位置：陀螺仪数据占据第9~11列（gx, gy, gz），与加速度
+  计（第2~4列）和GPS（第5~8列）互斥填充——每一行只有一种传感器
+  类型的字段有值，其他字段留空。这是合并文件设计中的"稀疏列"策略。
+
+  —— 陀螺仪Z轴漂移问题 ——
+
+  MEMS陀螺仪存在固有的零偏漂移。在静止状态下，gz的理论值为0 rad/s，
+  但实际读数围绕一个非零偏置波动。这个偏置的值在不同温度、不同
+  电池电量下缓慢变化。F3车头不正检测正是利用了这个"偏置"——当
+  车把歪斜时，骑行者的身体方向与车身前进方向不一致，导致身体携带
+  的手机相对于车身旋转轴产生一个固定的角速度偏移。
+
+3.4.3  GPS采集器（GpsCollector）
+
+  —— 双源定位策略 ——
+
+  GPS采集是本系统中唯一使用双数据源的传感器：
+
+    主定位源：LocationManager.GPS_PROVIDER
+      · 请求间隔：100ms（10Hz）
+      · 最小位移：0m（只要有更新就记录）
+      · 数据精度：速度±0.1 m/s，航向±2~5°
+
+    备用定位源：LocationManager.NETWORK_PROVIDER
+      · 请求间隔：5000ms（每5秒）
+      · 数据精度：速度±1~3 m/s，航向不可靠
+
+  双源策略的工程动机：
+  GPS卫星信号在以下典型场景中会被遮挡：(a) 高楼峡谷，(b) 立交桥
+  下方，(c) 隧道内，(d) 茂密树冠覆盖的绿道。GPS信号中断后，单靠
+  GPS_PROVIDER可能在数十秒甚至数分钟内无任何位置更新。网络定位
+  （基站+WiFi指纹）虽然精度低，但能在GPS盲区提供速度的粗略估计，
+  维持F1和F3分析的连续性。
+
+  —— LocationListener 回调 ——
+
+  onLocationChanged(location)
+    │
+    ├── 时间戳：SystemClock.elapsedRealtimeNanos()
+    │   （注意：这里不使用 location.getTime()，因为那是GPS时间，
+    │    与其他传感器时钟源不一致）
+    │
+    ├── 字段提取：
+    │   · latitude / longitude   — 始终有值
+    │   · speed        — hasSpeed() ? location.speed : ""
+    │   · bearing      — hasBearing() ? location.bearing : ""
+    │
+    ├── 写入文件：
+    │   writer.write("${ts},GPS,,,,
+    │                 ${lat},${lon},${speed},${course},,,\n")
+    │
+    └── Flow发射：GpsData(...) tryEmit
+
+  注意速度/航向字段可能为空字符串（""），对应GPS信号不足以计算
+  速度和航向的情况。这在冷启动后最初的几秒内、隧道中、以及设备
+  静止或极低速（<1 m/s）时非常常见。算法端load_sensor_data中
+  已有空字符串解析保护。
+
+  —— GPS 10Hz的由来 ——
+
+  v1.1版本使用1Hz GPS（1000ms请求间隔），在v1.2中升级为10Hz。
+  升级原因是F3检测需要至少2秒的连续直行段数据——1Hz GPS在2秒内
+  仅有2个定位点，航向变化率估计的噪声极大且无法反映真实的短时
+  航向波动。10Hz GPS在2秒内提供20个定位点，航向变化率的估计
+  质量显著提升。
+
+3.4.4  音频采集器（AudioCollector）
+
+  —— 硬件配置 ——
+
+  AudioRecord API，参数如下：
+    · 音频源：MediaRecorder.AudioSource.MIC（主麦克风）
+    · 采样率：8000 Hz
+    · 声道：CHANNEL_IN_MONO（单声道）
+    · 编码：ENCODING_PCM_16BIT
+    · 缓冲区大小：minBufSize × 2
+
+  minBufSize 是 AudioRecord.getMinBufferSize(8000, MONO, PCM_16BIT)
+  的返回值，取决于具体设备的音频硬件，通常在 640~1280 字节之间。
+
+  采样率选择8kHz的理由在2.1.2节(C2)中已论证：链条金属冲击的共振
+  频带在2~4kHz，8kHz的奈奎斯特频率正好覆盖；更高采样率对文件体积
+  和处理时间造成无谓增长。
+
+  —— 采集循环 ——
+
+  AudioCollector是唯一使用独立协程（withContext(Dispatchers.IO)）
+  的采集器，因为它包含一个while(isRecording)的阻塞式读取循环，
+  必须完全运行在后台线程上。
+
+  采集循环的伪代码：
+
+    while (isRecording) {
+        samplesRead = audioRecord.read(buffer, 0, buffer.size)
+        if (samplesRead <= 0) continue
+
+        // 将ShortArray转换为ByteArray（小端序）
+        byteBuffer.clear()
+        for (i in 0 until samplesRead) {
+            byteBuffer.putShort(buffer[i])
+        }
+
+        // 追加写入PCM文件
+        pcmFile.write(byteBuffer.array(), 0, samplesRead * 2)
+
+        // 更新累计采样数
+        totalSamples += samplesRead
+
+        // 写入时间戳元数据
+        metaWriter.write("${elapsedRealtimeNanos()},${totalSamples}\n")
+    }
+
+  —— 双文件输出机制 ——
+
+  音频采集产生了两个文件，而非一个。这是本项目音频处理的一个关键
+  设计决策：
+
+    文件一：音频.pcm
+            纯PCM数据，无任何头部或元数据。采样点在时间上均匀
+            分布（8kHz固定采样率），因此文件中第n个采样点的
+            时间 = t0 + n/8000 秒。
+
+    文件二：音频_时间戳.csv
+            记录{时间戳 → 累计采样数}的映射表。其存在的原因
+            是：AudioRecord的底层缓冲区读取并非精确的8000Hz——
+            实际采样率有微小偏差（晶体振荡器公差约±20ppm），
+            加上read()调用的调度延迟，累计采样数与理想时间的
+            映射存在偏差。元数据文件允许算法端在任意时间点
+            精确查找到对应的音频采样位置。
+
+  时间戳元数据的写入频率与AudioRecord.read()的返回频次一致（每次
+  读取约80~160ms的音频数据），因此在15分钟采集中元数据约含
+  5,000~11,000行。
+
+  —— 停止逻辑 ——
+
+  stop()方法的设计需要特别注意线程安全：
+
+    synchronized(this) {
+        isRecording = false          // ① 先置标志位
+        audioRecord?.stop()          // ② 停止录音硬件
+        audioRecord?.release()       // ③ 释放音频资源
+        audioRecord = null
+        pcmFile?.close()             // ④ 关闭PCM文件
+        pcmFile = null
+        metaWriter?.flush()
+        metaWriter?.close()          // ⑤ 关闭元数据文件
+        metaWriter = null
+    }
+
+  stop()必须与start()中的while循环在同一个锁的保护下，以确保
+  isRecording=false的写入立即对采集线程可见（happens-before关系）。
+
+
+
+3.5  数据同步与写入机制
+================================================================
+
+3.5.1  统一CSV合并文件设计
+
+四路传感器数据合并写入同一个CSV文件——「传感器数据.txt」。该设计
+的核心考量是：采集端不承担数据对齐的责任，而是保留每个传感器采样
+的原始时间戳，将对齐工作交给算法端的Python加载程序。
+
+  CSV格式（12列）：
+  ┌──────────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+  │timestamp │ 传感器  │ ax   │ ay   │ az   │ 纬度  │ 经度  │ 速度  │ 航向角│ gx   │ gy   │ gz   │
+  │   _ns    │  类型   │(m/s²)│(m/s²)│(m/s²)│ (°)  │ (°)  │(m/s) │  (°) │(rad/s)│(rad/s)│(rad/s)│
+  ├──────────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+  │ 12345678 │ 加速度计 │ 0.12 │ -0.03│ 9.81 │      │      │      │      │      │      │      │
+  │ 12345700 │ 陀螺仪  │      │      │      │      │      │      │      │ 0.01 │ 0.00 │ 0.05 │
+  │ 12345800 │ GPS     │      │      │      │39.90 │116.38│5.42  │ 87.3 │      │      │      │
+  └──────────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+
+  图3-3  合并CSV文件的稀疏列填充示意
+
+  特点：
+    · 每行记录一个传感器的一次采样，通过"传感器类型"字段区分。
+    · 该传感器不适用的列留空（两个逗号之间无内容）。
+    · 时间戳严格递增，但行与行之间的时间间隔不均匀（三种传感器
+      的采样率不同，且操作系统调度引入抖动）。
+    · 文件末尾以换行符结束，便于cat/type命令直接查看。
+
+3.5.2  线程安全策略
+
+合并文件由多个传感器线程并发写入同一个Writer，必须保证线程安全。
+本项目采用最轻量的方案——synchronized锁：
+
+  // 在每个Collector的回调中：
+  synchronized(lock) {
+      writer?.write("${ts},加速度计,${ax},${ay},${az},,,,,,,\n")
+  }
+
+  lock 是各Collector内部的私有Object实例。由于所有Collector共享
+  同一个Writer引用（由SensorService在启动时传入），实际上所有写
+  操作竞争的是同一把锁。
+
+  选型理由：
+    · 临界区极短（一次字符串拼接+write调用），锁争用概率低。
+    · 无需引入ReentrantLock或读写锁的额外开销。
+    · FileWriter自身带有缓冲区（默认约8KB），write()通常直接写入
+      缓冲区而不会触发磁盘IO，临界区执行时间在微秒量级。
+
+3.5.3  时间戳一致性保证
+
+全部四类传感器使用同一时钟源记录时间戳：
+
+  · 加速度计/陀螺仪：event.timestamp（系统传感器时钟）
+  · GPS：SystemClock.elapsedRealtimeNanos()（系统单调时钟）
+  · 音频：SystemClock.elapsedRealtimeNanos()（系统单调时钟）
+
+在Linux内核层面，event.timestamp和elapsedRealtimeNanos()共享同一
+时钟源（CLOCK_BOOTTIME），因此它们之间的时间戳偏差在微秒量级，
+完全可以视为同一时间基准。Python算法端的跨传感器时间对齐正是
+基于这一假设。
+
+
+
+3.6  WakeLock休眠控制
+================================================================
+
+3.6.1  为什么需要WakeLock
+
+Android手机在屏幕关闭后约1~2分钟进入深度休眠（Deep Sleep）状态。
+在此状态下，CPU时钟停止，传感器硬件进入低功耗模式，传感器回调
+停止触发——导致数据采集静默中断。WakeLock的作用是阻止CPU进入
+深度休眠，确保传感器事件持续被处理。
+
+本App使用Partial WakeLock（PARTIAL_WAKE_LOCK）：
+  · CPU保持运行（传感器事件持续处理）
+  · 屏幕可熄灭（节省电量）
+  · 键盘/触摸屏可关闭
+  · 仅此一种WakeLock适合长时间后台采集
+
+3.6.2  超时保护
+
+WakeLock.acquire(10 * 60 * 1000L) — 10分钟超时。万一在异常情况
+下（如代码Bug导致stop未被调用），WakeLock会在10分钟后自动释放，
+防止手机持续耗电至电池耗尽。
+
+正常的采集流程中，用户点击「暂停」会调用 releaseWakeLock() 提前
+释放，不会等待超时。
+
+3.6.3  生命周期管理
+
+  acquireWakeLock() — 在 startCollection() 中调用，采集开始时获取。
+  releaseWakeLock() — 在 cleanupSession() 中调用，采集结束时释放。
+
+  额外保护：releaseWakeLock() 在 acquireWakeLock() 中首先调用一次，
+  确保不会累积多个WakeLock实例（虽然当前代码流中理论上不会发生）。
+
+
+
+3.7  文件存储路径设计
+================================================================
+
+3.7.1  优先路径：公共Documents目录
+
+  Environment.getExternalStoragePublicDirectory(
+      Environment.DIRECTORY_DOCUMENTS)
+  /Documents/自行车数据/20250610_143025/
+
+  优势：(a) USB连接电脑后在资源管理器中直接可见，(b) 应用卸载后
+  数据不会丢失，(c) 符合用户的文件管理直觉。
+
+  劣势：在少数设备上可能因存储权限问题而不可写（例如企业策略限制
+  或Android 11+的设备特定行为）。
+
+3.7.2  回退路径：应用私有目录
+
+  getExternalFilesDir(null) / "session_20250610_143025"
+
+  优势：始终可写，无需任何权限。
+
+  劣势：存放在 Android/data/com.bicycle.datalogger/ 下，应用卸载时
+  会被一并删除；USB连接后不直接在根目录可见，需要通过特定路径访问。
+
+3.7.3  路径选择逻辑
+
+  try:
+      创建 Documents/自行车数据/时间戳/ 文件夹
+      if 创建成功 且 可写:
+          使用此路径
+      else:
+          抛出异常
+  catch:
+      使用 getExternalFilesDir 回退路径
+      记录日志警告
+
+  会话文件夹路径通过 sessionPath StateFlow 实时传递给前端UI，在
+  MainScreen的"保存位置"卡片中展示。
+
+
+
+3.8  崩溃恢复机制
+================================================================
+
+3.8.1  全局异常捕获
+
+MainActivity.onCreate() 中设置 DefaultUncaughtExceptionHandler：
+
+  Thread.setDefaultUncaughtExceptionHandler { _, ex ->
+      crashLog.edit().putString("last_crash",
+          ex.stackTraceToString()).commit()
+      android.os.Process.killProcess(android.os.Process.myPid())
+  }
+
+  逻辑：
+    · 捕获所有未被 try-catch 处理的异常
+    · 将堆栈信息写入 SharedPreferences（轻量级持久化）
+    · 立即杀死进程（避免残留状态导致下次启动行为异常）
+
+3.8.2  CrashScreen展示
+
+App下次启动时，在 setContent 中检查 crashLog 是否存在上次的崩溃
+信息。若有，优先展示 CrashScreen 而非 MainScreen：
+
+  CrashScreen的界面：
+    · 标题：「上次崩溃信息」
+    · 内容：完整的Java堆栈跟踪（等宽字体，可滚动查看）
+    · 按钮：「关闭」——点击后清除崩溃日志，切换到MainScreen
+
+  这一设计对远程技术支持尤其有价值：巡检人员可通过截屏将崩溃堆栈
+  发送给开发者，无需连接电脑使用logcat。
+
+3.8.3  START_STICKY与崩溃恢复的配合
+
+SensorService 的 onStartCommand 返回 START_STICKY。这意味着当服务
+被系统杀死（而非用户点击暂停）时：
+
+  (1) 系统会在资源允许时自动重启服务。
+  (2) 重启时 Intent 为 null —— 不携带之前的ACTION。
+  (3) 服务不会自动恢复采集（因为Intent为null，不会触发startCollection）。
+
+  这是有意为之的安全策略：意外崩溃后的自动恢复可能导致文件被覆盖
+  或WakeLock泄漏。宁可丢失崩溃后的数据（已崩溃前写入的数据在文件
+  系统中完好），也不冒险进行不可控的自动重启。
+
+
+
+3.9  本章小结
+================================================================
+
+本章自底向上详细阐述了Android多传感器数据采集子系统的设计。核心
+要点如下：
+
+  (1) SensorService作为前台服务，是应对Android后台限制的唯一合法
+      方案。其生命周期状态机（onCreate→onStartCommand→onDestroy）
+      配合 SupervisorJob 协程管理，保证了采集的可靠启动和优雅停止。
+
+  (2) 四个传感器采集器遵循统一的设计模式（start/write/stop），但
+      在采样率选择和数据写入方式上各有针对性优化。加速度计100Hz
+      满足振动分析需求，陀螺仪50Hz兼顾偏置估计和文件体积，GPS双源
+      （10Hz主+5s备）适配城市信号环境，音频8kHz覆盖链条共振频带。
+
+  (3) 合并CSV文件 + synchronized锁 + 统一时钟源的三重设计，以最简
+      工程复杂度实现了多源异构传感器数据的同步采集和存储。
+
+  (4) WakeLock的超时保护、双路径文件存储、CrashScreen全局异常捕获
+      等防御性设计，确保系统在异常条件下的快速恢复和数据安全。
+
+================================================================
+                       第三章完
+================================================================

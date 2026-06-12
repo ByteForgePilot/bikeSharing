@@ -1,0 +1,86 @@
+# ============================================
+# bikeSharing Docker Compose — 团队统一开发环境
+# ============================================
+# 用法:
+#   docker compose up -d                    # 后端全家桶 (db + redis + backend)
+#   docker compose --profile ml up -d       # 后端 + Jupyter ML 环境
+#   docker compose up -d db redis           # 仅基础设施 (后端/ML 本地跑)
+#   docker compose down                     # 停止所有服务
+#   docker compose down -v                  # 停止 + 清空数据库
+#
+# 首次启动: cp .env.example .env (可选，不改也能跑)
+# ============================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-bikesharing}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@db:5432/bikesharing}
+      DATABASE_URL_SYNC: ${DATABASE_URL_SYNC:-postgresql://postgres:postgres@db:5432/bikesharing}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ---- Jupyter Lab (ML 环境) ----
+  # 使用: docker compose --profile ml up -d
+  jupyter:
+    image: jupyter/scipy-notebook:python-3.11
+    profiles:
+      - ml
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./ml:/home/jovyan/work
+      - ./backend:/home/jovyan/backend
+    environment:
+      JUPYTER_TOKEN: ""
+    command: >
+      bash -c "
+      pip install -q librosa joblib &&
+      start-notebook.py
+        --NotebookApp.token=''
+        --NotebookApp.password=''
+        --NotebookApp.notebook_dir='/home/jovyan/work'
+      "
+
+volumes:
+  pgdata:
+  redisdata:

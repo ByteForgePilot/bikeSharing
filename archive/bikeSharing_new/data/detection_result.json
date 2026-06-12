@@ -1,0 +1,73 @@
+{
+  "health": {
+    "total_score": 70.76,
+    "harmonic_mean": 83.04,
+    "penalty_factor": 0.8521,
+    "level": "good",
+    "recommendation": "推荐骑行",
+    "sub_scores": {
+      "tire_wobble": 85.0,
+      "chain_noise": 87.73,
+      "handlebar_misalignment": 76.59
+    },
+    "details": {
+      "F1_tire_wobble": {
+        "score": 85.0,
+        "wheel_freq_hz": 6.4,
+        "amplitude_f": 0.3237,
+        "amplitude_2f": 0.2491,
+        "P_value": 0.4482,
+        "flat_fraction": 0.0
+      },
+      "F2_chain_noise": {
+        "score": 87.73,
+        "prediction": "良好",
+        "pedal_snr_db": 11.73,
+        "harmonic_ratio": 0.667,
+        "phase_consistency": 0.214,
+        "modulation_depth": 0.9479,
+        "cepstrum_score": 1.0,
+        "anomaly_score": 0.3022
+      },
+      "F3_handlebar_misalignment": {
+        "score": 76.59,
+        "delta_theta_deg": 5.11,
+        "yaw_bias_rad_s": 0.001,
+        "straight_segments": 13,
+        "ax_wobble": 3.2856
+      }
+    }
+  },
+  "f1": {
+    "score": 85.0,
+    "wheel_freq_hz": 6.4,
+    "amplitude_f": 0.3237,
+    "amplitude_2f": 0.2491,
+    "P_value": 0.4482,
+    "flat_fraction": 0.0
+  },
+  "f2": {
+    "score": 87.73,
+    "prediction": "良好",
+    "pedal_snr_db": 11.73,
+    "harmonic_ratio": 0.667,
+    "phase_consistency": 0.214,
+    "modulation_depth": 0.9479,
+    "cepstrum_score": 1.0,
+    "anomaly_score": 0.3022
+  },
+  "f3": {
+    "score": 76.59,
+    "delta_theta_deg": 5.11,
+    "yaw_bias_rad_s": 0.001,
+    "straight_segments": 13,
+    "ax_wobble": 3.2856
+  },
+  "window_used": true,
+  "data_summary": {
+    "accel_count": 1498,
+    "gyro_count": 749,
+    "audio_samples": 120640,
+    "audio_ts_blocks": 378
+  }
+}
